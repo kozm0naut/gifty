@@ -1,0 +1,20 @@
+{
+  "name": "gifty",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:db": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$dockerReady = $false; if (-not (Get-Process 'Docker Desktop' -ErrorAction SilentlyContinue)) { Start-Process 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe' }; for ($i = 0; $i -lt 120; $i++) { docker info > $null 2>&1; if ($LASTEXITCODE -eq 0) { $dockerReady = $true; break }; Start-Sleep -Seconds 2 }; if (-not $dockerReady) { Write-Error 'Docker Desktop did not become ready in time.'; exit 1 }; docker-compose up -d postgres\"",
+    "dev": "npm run dev:db && concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test": "npm --prefix backend run test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

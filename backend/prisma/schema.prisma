@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ListStatus {
+  active
+  archived
+  deleted
+}
+
+enum GiftItemState {
+  available
+  claimed
+  purchased
+}
+
+enum SharePermissionLevel {
+  shared
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  createdAt    DateTime @default(now())
+
+  ownedLists         GiftList[]
+  ownedPermissions   SharePermission[] @relation("OwnerPermission")
+  receivedPermissions SharePermission[] @relation("RecipientPermission")
+  claimedItems       GiftItem[] @relation("Claimant")
+}
+
+model GiftList {
+  id          String      @id @default(uuid())
+  ownerUserId String
+  owner       User        @relation(fields: [ownerUserId], references: [id])
+  title       String
+  description String?
+  status      ListStatus  @default(active)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  items             GiftItem[]
+  sharePermissions  SharePermission[]
+}
+
+model GiftItem {
+  id              String         @id @default(uuid())
+  giftListId      String
+  list            GiftList       @relation(fields: [giftListId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  quantity        Int?
+  unitPrice       Decimal?
+  state           GiftItemState  @default(available)
+  claimantUserId  String?
+  claimant        User?          @relation("Claimant", fields: [claimantUserId], references: [id])
+  claimedAt       DateTime?
+  purchasedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([giftListId])
+}
+
+model SharePermission {
+  id             String               @id @default(uuid())
+  giftListId     String
+  list           GiftList             @relation(fields: [giftListId], references: [id], onDelete: Cascade)
+  ownerUserId    String
+  owner          User                 @relation("OwnerPermission", fields: [ownerUserId], references: [id])
+  recipientUserId String
+  recipient      User                 @relation("RecipientPermission", fields: [recipientUserId], references: [id])
+  permission     SharePermissionLevel
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([giftListId, recipientUserId])
+  @@index([giftListId])
+  @@index([recipientUserId])
+}

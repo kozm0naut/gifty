@@ -1,0 +1,23 @@
+{
+  "users": [
+    {
+      "id": "user_8824c15e-b2a9-45e7-99c6-fa6c134bb44d",
+      "email": "persisted@example.com",
+      "passwordHash": "$2a$10$AQzXcarohLayfEOhmEI8Bu2YEGI9EbPwg.FrardeZXlH8wpzukmru",
+      "displayName": "Persisted User",
+      "createdAt": "2026-09-11T19:23:42.374Z"
+    }
+  ],
+  "lists": [
+    {
+      "id": "list_67a2c255-b47e-4377-b6ac-3bae793865d6",
+      "ownerUserId": "user_8824c15e-b2a9-45e7-99c6-fa6c134bb44d",
+      "title": "Persistent List",
+      "description": "Should survive restart",
+      "createdAt": "2026-09-11T19:23:42.383Z",
+      "updatedAt": "2026-09-11T19:23:42.383Z"
+    }
+  ],
+  "items": [],
+  "sharePermissions": []
+}
