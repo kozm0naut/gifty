@@ -6,6 +6,19 @@ export type AuthenticatedRequest = Request & {
   user?: { id: string; email: string };
 };
 
+/**
+ * Returns the JWT signing secret, failing fast when it is not configured.
+ * There is deliberately NO default/fallback secret (Constitution §IV):
+ * production backstopped by `validateConfig()`, tests set `JWT_SECRET` explicitly.
+ */
+export function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is required');
+  }
+  return secret;
+}
+
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization ?? '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -15,7 +28,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'development-secret') as { sub: string; email: string };
+    const payload = jwt.verify(token, getJwtSecret()) as { sub: string; email: string };
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
 
     if (!user) {

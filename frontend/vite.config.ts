@@ -3,6 +3,16 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    // Dev parity with the containerized single-origin deployment: proxy the
+    // API routes to the local backend so the SPA can use relative (same-origin)
+    // API paths in dev, exactly like production.
+    proxy: {
+      '/auth': 'http://localhost:4000',
+      '/lists': 'http://localhost:4000',
+      '/items': 'http://localhost:4000',
+    },
+  },
   test: {
     environment: 'jsdom',
     // Scope vitest to unit tests under src/. The Playwright e2e specs under

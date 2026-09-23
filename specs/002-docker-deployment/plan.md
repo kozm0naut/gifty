@@ -10,7 +10,7 @@
 
 Package the existing Gifty application (React/Vite frontend, Express/Prisma backend, PostgreSQL 16) into a single-command, reproducible Docker deployment. The user runs one documented command from the project root and gets the full application — web UI, API, and data store — running with data that persists across stop/start cycles. A dedicated health/readiness endpoint (FR-013) gives operators and tests an unambiguous "ready" signal. Documented stop and reset commands complete the operational contract.
 
-Technical approach: extend the existing `docker-compose.yml` (currently postgres-only) into a full three-service stack (postgres + backend + web). The backend service builds the TypeScript API and also serves the frontend's static production build, so the user reaches the whole app at one URL (default host port `8080`). Data lives in a named volume; reset = remove volume + recreate. Readiness is achieved via a lightweight `/healthz` endpoint on the backend and a Compose healthcheck chain (postgres → backend → web).
+Technical approach: extend the existing `docker-compose.yml` (currently postgres-only) into a two-container stack (postgres + app). The single `app` image builds the TypeScript API **and** also serves the frontend's static production build, so the user reaches the whole app at one URL (default host port `8080`). Data lives in a named volume; reset = remove volume + recreate. Readiness is achieved via a lightweight `/healthz` endpoint on the app and a Compose healthcheck chain (postgres → app).
 
 ## Technical Context
 
@@ -19,7 +19,7 @@ Technical approach: extend the existing `docker-compose.yml` (currently postgres
 **Primary Dependencies**:
 - Backend: Express 4, Prisma 6, `@prisma/client`, bcryptjs, jsonwebtoken, cors, uuid
 - Frontend: React 18, react-router-dom 6, Vite 6 + `@vitejs/plugin-react`
-- Database: PostgreSQL 16 (image `postgres:16-alpine`, already used by the current `docker-compose.yml`)
+- Database: PostgreSQL 16 (image `postgres:16.x-alpine`, minor-pinned for reproducibility; the current `docker-compose.yml` already uses the 16 line)
 
 **Storage**: PostgreSQL 16 via Prisma (`backend/prisma/schema.prisma`), persisted in a Docker named volume `gifty_postgres_data`. No other storage.
 
@@ -68,6 +68,7 @@ specs/002-docker-deployment/
 ├── research.md          # Phase 0 output
 ├── data-model.md        # Phase 1 output
 ├── quickstart.md        # Phase 1 output
+├── architecture.md      # Illustrative Mermaid diagram of the two-container deployment
 ├── contracts/
 │   └── deployment.md    # Phase 1 output — operational contract (commands, ports, readiness)
 └── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
@@ -80,7 +81,7 @@ specs/002-docker-deployment/
 ├── Dockerfile                 # NEW: multi-stage build at repo root (frontend build + backend build → runtime, non-root)
 ├── .dockerignore              # NEW: node_modules, **/dist, .env*, **/tests, test-results, .git, specs/
 ├── docker-compose.yml         # EXTEND: add `app` service + healthcheck + depends_on chain; keep `postgres`
-├── entrypoint.sh              # NEW: run `prisma migrate deploy`, then `node dist/server.js`
+├── entrypoint.sh              # NEW: run `prisma migrate deploy`, then `node dist/src/server.js` (tsc emits dist/src/ — see research D3/C1)
 ├── backend/
 │   ├── src/
 │   │   └── app.ts             # EXTEND: GET /healthz + serve frontend static build (production only)
@@ -89,7 +90,7 @@ specs/002-docker-deployment/
 ├── frontend/                  # (unchanged source; built inside the Dockerfile's frontend stage)
 ├── docs/
 │   └── docker.md              # NEW: user-facing deployment documentation (start/stop/reset/readiness)
-└── README.md                  # EXTEND: pointer to docs/docker.md
+└── README.md                  # NEW: create (none exists yet) — pointer to docs/docker.md + one-command quickstart
 ```
 
 **Structure Decision**: Single Compose project at the repo root with **two services** — `postgres` and `app`. One root `Dockerfile` (build context = repo root) produces a combined `app` image that runs the compiled backend API **and** serves the frontend's static production build (research decisions D1/D2), so the user needs only one published port (`8080`). The existing postgres-only `docker-compose.yml` is extended in place (rename `postgres_data` → `gifty_postgres_data`). No new top-level directories; no monorepo restructuring.

@@ -1,23 +1,60 @@
-version: '3.9'
+# Gifty — two-container stack: postgres (internal-only) + app (SPA + API).
+# Normative contract: specs/002-docker-deployment/contracts/deployment.md
+#   * single URL      : http://localhost:8080  (host ${PORT:-8080} -> container 4000)
+#   * readiness       : GET /healthz  (poll until 200 {"status":"ok"})
+#   * DB internal-only: NOT published to the host (Constitution §I/§IV)
+#   * data volume     : gifty_postgres_data (survives `down`, removed by `down -v`)
+#   * JWT_SECRET      : REQUIRED — no default; startup fails fast if unset (§IV)
 
 services:
   postgres:
-    image: postgres:16-alpine
-    container_name: gifty-postgres
+    image: postgres:16.9-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: gifty
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: gifty
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gifty_dev_password}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - gifty_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d gifty"]
+      test: ["CMD-SHELL", "pg_isready -U gifty -d gifty"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+    networks:
+      - gifty_net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gifty-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # PORT is fixed to 4000 inside the image (Dockerfile ENV); the host-side
+      # ${PORT:-8080} in `ports:` below is the only published mapping.
+      DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD:-gifty_dev_password}@postgres:5432/gifty?schema=public
+      # Required — injected from .env at `up` time; no default is permitted.
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "${PORT:-8080}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # node:alpine has no curl; Node 22's global fetch is used instead.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - gifty_net
+
+networks:
+  gifty_net:
+    driver: bridge
 
 volumes:
-  postgres_data:
+  gifty_postgres_data:

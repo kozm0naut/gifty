@@ -1,6 +1,9 @@
 import { Page } from '@playwright/test';
 
-const API_BASE = 'http://localhost:4000';
+// API origin for the e2e helpers. Defaults to the dev backend (:4000); when the
+// suite targets the containerized app (BASE_URL set, e.g. http://localhost:8080)
+// the API is served same-origin, so use that origin instead.
+const API_BASE = process.env.BASE_URL || 'http://localhost:4000';
 export const E2E_PASSWORD = 'Password123!';
 
 // --- Types ---

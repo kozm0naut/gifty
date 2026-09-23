@@ -1,0 +1,29 @@
+# Docker build-context exclusions (research D9)
+# Keep the context lean: no node_modules, no host build artifacts, no secrets,
+# no dev/test tooling. NOTE: entrypoint.sh is intentionally NOT excluded — it is
+# COPY'd into the runtime image by the Dockerfile.
+
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+# NOTE: backend/tests is intentionally NOT excluded — the backend tsconfig
+# includes tests/**, so `tsc` (run in the Docker build stage) needs them present.
+**/test-results
+**/playwright-report
+**/coverage
+**/*.log
+.git
+.gitignore
+.specify
+specs
+docs
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.md
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.dev.yml

@@ -30,6 +30,13 @@ until curl -fs http://localhost:8080/healthz > /dev/null 2>&1; do sleep 1; done
 echo "Gifty is ready at http://localhost:8080"
 ```
 
+**Windows PowerShell equivalent** (setup steps 1–2 are the same; only the wait loop differs):
+
+```powershell
+do { Start-Sleep 1 } until (curl.exe -fs http://localhost:8080/healthz | Out-Null)
+Write-Host "Gifty is ready at http://localhost:8080"
+```
+
 **Expected**: `docker compose up` returns with `postgres` healthy and `app` serving; the readiness loop exits; `curl http://localhost:8080/healthz` returns `200 {"status":"ok"}`. The app is reachable at `http://localhost:8080` within 2 minutes of a clean start (SC-001).
 
 ## Validation Scenarios
@@ -116,11 +123,11 @@ docker compose down -v
 
 ## Success (Definition of Done for this feature)
 
-- [ ] `docker compose up --build -d` from a clean machine yields a working app at `http://localhost:8080` in under 10 minutes, with no host dependency installs (SC-001).
-- [ ] All core flows work end-to-end in the container (SC-002).
-- [ ] Data persists across stop/start, verified by V2 (SC-003).
-- [ ] A second clean machine reproduces the working app from docs alone (SC-004).
-- [ ] All failure scenarios (V5, V6) report clear, actionable messages; no silent/data-losing failures (SC-005).
-- [ ] `GET /healthz` is the readiness signal and returns `200` within 2 minutes of a clean start (FR-013).
-- [ ] Privacy and authorization behavior are unchanged (V3; Constitution §I/§II/§IV).
-- [ ] Playwright e2e (8 tests) passes against `http://localhost:8080`; backend suite (59 tests) still passes.
+- [x] `docker compose up --build -d` from a clean machine yields a working app at `http://localhost:8080` in under 10 minutes, with no host dependency installs (SC-001).
+- [x] All core flows work end-to-end in the container (SC-002).
+- [x] Data persists across stop/start, verified by V2 (SC-003).
+- [x] A second clean machine reproduces the working app from docs alone (SC-004).
+- [x] All failure scenarios (V5, V6) report clear, actionable messages; no silent/data-losing failures (SC-005).
+- [x] `GET /healthz` is the readiness signal and returns `200` within 2 minutes of a clean start (FR-013).
+- [x] Privacy and authorization behavior are unchanged (V3; Constitution §I/§II/§IV).
+- [x] Playwright e2e (8 tests) passes against `http://localhost:8080`; backend suite (59 tests) still passes.

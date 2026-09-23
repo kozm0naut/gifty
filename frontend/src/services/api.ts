@@ -1,7 +1,10 @@
 const AUTH_TOKEN_KEY = 'gift-list-token';
 const USER_KEY = 'gift-list-user';
 export const SESSION_EXPIRED_EVENT = 'gift-list:session-expired';
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// API base URL. Defaults to same-origin (relative paths) so the containerized
+// single-origin deployment (SPA + API on one host/port) works without config;
+// set VITE_API_URL to point at a different API origin (e.g. dev on :4000).
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export type AuthPayload =
   | { email: string; password: string }

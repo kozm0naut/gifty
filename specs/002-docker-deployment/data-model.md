@@ -29,7 +29,7 @@ The source of truth is `backend/prisma/schema.prisma`. The containerized deploym
 |--------|-----------|------------------------------|
 | **Compose project** | The `docker-compose.yml` at the repo root defining the full stack. | Two services: `postgres`, `app`. One internal network. Named volume `gifty_postgres_data`. |
 | **`app` image** | A single container image (built from the root `Dockerfile`) that runs the compiled backend API **and** serves the frontend static build. | Runs as a **non-root user** (Constitution §IV). No secrets baked in. Node 22 runtime. |
-| **`postgres` container** | PostgreSQL 16 (`postgres:16-alpine`) holding all persisted application data. | Healthcheck: `pg_isready -U gifty -d gifty`. Not published to the host by default. |
+| **`postgres` container** | PostgreSQL 16 (`postgres:16.x-alpine`, minor-pinned) holding all persisted application data. | Healthcheck: `pg_isready -U gifty -d gifty`. Not published to the host by default. |
 | **Named volume `gifty_postgres_data`** | Durable storage for the Postgres data directory. | The **single source of truth** for persisted application data (FR-004/FR-005). Survives `docker compose down` (without `-v`); removed by `docker compose down -v` (reset, FR-008). |
 | **Environment configuration** | Runtime config injected at `docker compose up` time. | `DATABASE_URL`, `JWT_SECRET` (required, no default), `NODE_ENV=production`, `POSTGRES_*`. See `contracts/deployment.md` for the full table. |
 | **Readiness endpoint** | `GET /healthz` on the `app` service. | Returns `200 {"status":"ok"}` when the API process is up (FR-013). The operator/test "wait for ready" signal. |

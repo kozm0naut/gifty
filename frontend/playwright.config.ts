@@ -13,6 +13,11 @@ import { defineConfig, devices } from '@playwright/test';
  * Playwright's webServer readiness check treats any response with a status
  * code < 500 as "server is up".
  */
+// baseURL is overridable via the BASE_URL env var (default http://localhost:5173
+// for the dev Vite server; set BASE_URL=http://localhost:8080 to target the
+// containerized single-origin app).
+const baseURL = process.env.BASE_URL || 'http://localhost:5173';
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 60_000,
@@ -22,7 +27,7 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? [['html', { open: 'never' }], ['list']] : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL,
     trace: 'on-first-retry',
   },
   projects: [

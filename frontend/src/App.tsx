@@ -43,7 +43,7 @@ function AppContent() {
             <div className="nav-user-cluster">
               <span
                 className="nav-avatar"
-                style={{ background: getNameColors(currentUserName).primary }}
+                style={{ background: getNameColors(currentUserName, true).primary }}
                 title={currentUserName}
               >
                 {getInitials(currentUserName)}
