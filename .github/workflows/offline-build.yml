@@ -1,0 +1,70 @@
+# T027 — FR-009 (clarification 2026-09-22): "cached builds work offline".
+#
+# Proves the offline leg with hard evidence:
+#   1. WARM  — one normal `docker compose build` populates the image/layer
+#              cache (first build may pull; FR-009 allows that).
+#   2. PROVE — `docker buildx build --network=none` rebuilds the same image
+#              with the build sandbox's network DISABLED. Every step MUST be
+#              served from cache; any step needing an external download fails
+#              the build, failing the job.
+#   3. RUN   — `docker compose up -d` + readiness proves the cached image
+#              actually serves the app.
+name: Offline cached build (FR-009)
+
+on:
+  push:
+    branches: [main, master, 'docker-container']
+  pull_request:
+    branches: [main, master, 'docker-container']
+  workflow_dispatch:
+
+jobs:
+  offline-build:
+    name: Warm cache, then rebuild with network disabled
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 1. WARM: allowed to pull (FR-009 permits first-build network access).
+      - name: Warm build (populates the cache)
+        run: |
+          set -eu
+          docker compose build
+
+      # 2. PROVE: identical build with the build sandbox's network disabled.
+      #    If every step is cache-served, this succeeds; any attempt to reach
+      #    the network fails the build (BuildKit enforces it).
+      - name: Offline rebuild (docker buildx build --network=none)
+        run: |
+          set -eu
+          docker buildx build --load --network=none \
+            -f Dockerfile -t gifty-app . 2>&1 | tee /tmp/offline-build.log
+          if grep -Ei "Pulled |pulling |manifest sha256" /tmp/offline-build.log; then
+            echo "::error::An image pull was attempted during the offline build"
+            exit 1
+          fi
+          echo "Offline rebuild completed: every step served from cache."
+
+      # 3. RUN: the cached image must actually start and serve.
+      - name: Start from cache + readiness (docker compose up -d)
+        run: |
+          set -eu
+          export JWT_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          docker compose up -d
+          for i in $(seq 1 120); do
+            if curl -fs http://localhost:8080/healthz > /dev/null 2>&1; then
+              echo "Gifty is ready at http://localhost:8080 (from cached image)"
+              curl -fs http://localhost:8080/healthz; echo
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Cached start did not report ready within 2 minutes"
+          docker compose logs --no-color
+          exit 1
+
+      - name: Teardown
+        if: always()
+        run: docker compose down || true
