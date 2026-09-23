@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # 1. WARM: allowed to pull (FR-009 permits first-build network access).
       - name: Warm build (populates the cache)

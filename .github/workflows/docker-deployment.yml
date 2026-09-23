@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Documented start (contracts/deployment.md §1). JWT_SECRET is required
       # with no default (Constitution §IV) — generate a run-scoped secret the
