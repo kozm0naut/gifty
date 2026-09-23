@@ -10,6 +10,14 @@
         "/^cd C:\\\\Users\\\\Travis\\\\gifty; powershell -ExecutionPolicy Bypass -File \\.specify/scripts/powershell/check-prerequisites\\.ps1 -Json -RequireSpec -RequireTasks -IncludeTasks$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^powershell -NoProfile -ExecutionPolicy Bypass -File \\.specify\\\\scripts\\\\powershell\\\\check-prerequisites\\.ps1 -Json -RequireSpec -RequireTasks -IncludeTasks$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^powershell -NoProfile -ExecutionPolicy Bypass -File \\.specify\\\\scripts\\\\powershell\\\\check-prerequisites\\.ps1 -Json -RequireTasks -IncludeTasks$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

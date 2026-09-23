@@ -1,0 +1,11 @@
+# Dev-only override: re-expose the Postgres port to the host so the existing
+# `npm run dev:db` workflow (local Prisma/migrations against a host-reachable DB)
+# keeps working. The production `docker-compose.yml` intentionally does NOT
+# publish 5432 (DB is internal-only). See research D10.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"

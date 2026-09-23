@@ -42,7 +42,7 @@ test.describe('T035: Share & claim UX success flows', () => {
     await expect(espressoCard.locator('.badge')).toContainText('BY YOU');
 
     // Recipient marks the item as purchased
-    await espressoCard.locator('button', { hasText: 'Mark as Purchased' }).click();
+    await espressoCard.locator('button', { hasText: 'Purchased' }).click();
     await expect(espressoCard.locator('.badge')).toContainText('purchased');
     await expect(espressoCard.locator('.badge')).toContainText('BY YOU');
 

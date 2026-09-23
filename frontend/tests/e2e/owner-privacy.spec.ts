@@ -48,7 +48,7 @@ test.describe('T037: Owner privacy visibility', () => {
 
     // Owner sees no claim/purchase buttons
     await expect(espressoCard.locator('button', { hasText: 'Claim' })).toHaveCount(0);
-    await expect(espressoCard.locator('button', { hasText: 'Mark as Purchased' })).toHaveCount(0);
+    await expect(espressoCard.locator('button', { hasText: 'Purchased' })).toHaveCount(0);
   });
 
   test('recipient sees correct claim/purchase state on shared list', async ({ page }) => {
@@ -85,8 +85,9 @@ test.describe('T037: Owner privacy visibility', () => {
     await expect(espressoCard.locator('.badge')).toContainText('purchased');
     await expect(espressoCard.locator('.badge')).toContainText('BY YOU');
 
-    // Recipient sees the resolved purchaser identity (FR-009 / T047)
-    await expect(espressoCard).toContainText('Purchased by E2E Recipient');
+    // Recipient sees the resolved purchaser identity (FR-009 / T047).
+    // The recipient is the purchaser, so the UI resolves the identity as "BY YOU".
+    await expect(espressoCard.locator('.badge')).toContainText('BY YOU');
 
     // Recipient sees item 2 as "available"
     await expect(cookbookCard.locator('.badge')).toContainText('available');

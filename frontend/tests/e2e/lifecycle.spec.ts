@@ -54,7 +54,7 @@ test.describe('T025: Lifecycle edge cases (claim, cancel, purchase, reset)', () 
     await expect(card.locator('.badge')).toContainText('BY YOU');
 
     // 4. Mark purchased
-    await card.locator('button', { hasText: 'Mark as Purchased' }).click();
+    await card.locator('button', { hasText: 'Purchased' }).click();
     await expect(card.locator('.badge')).toContainText('purchased');
     await expect(card.locator('.badge')).toContainText('BY YOU');
 

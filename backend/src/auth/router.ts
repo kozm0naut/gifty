@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../prisma.js';
 import { makeId } from '../common/id.js';
+import { getJwtSecret } from './middleware.js';
 
 export function createAuthRouter() {
   const router = Router();
@@ -31,7 +32,7 @@ export function createAuthRouter() {
         },
       });
 
-      const token = jwt.sign({ sub: user.id, email: user.email }, process.env.JWT_SECRET || 'development-secret', {
+      const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
         expiresIn: '7d',
       });
 
@@ -59,7 +60,7 @@ export function createAuthRouter() {
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
-      const token = jwt.sign({ sub: user.id, email: user.email }, process.env.JWT_SECRET || 'development-secret', {
+      const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
         expiresIn: '7d',
       });
 

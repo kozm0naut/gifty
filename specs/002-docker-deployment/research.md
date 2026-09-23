@@ -31,13 +31,13 @@
 ## D3: How is the backend built and run?
 
 **Decision**: Multi-stage Node image:
-1. **build stage**: `node:22-alpine` + `npm ci` + `tsc -p tsconfig.json` + `prisma generate` → produces `dist/` + generated Prisma client.
-2. **runtime stage**: `node:22-alpine`, copy `dist/`, `prisma/`, `node_modules` (prod-only, via a separate `npm ci --omit=dev` in an intermediate layer), create a non-root user, `USER node`, `CMD ["node", "dist/server.js"]`.
+1. **build stage**: `node:22.x-alpine` + `npm ci` (full, so the `prisma` CLI is present) + `npx prisma generate` + `tsc -p tsconfig.json` + `npm prune --omit=dev` → produces `dist/` (see emit-path note) + the generated Prisma client in `node_modules/@prisma/client`, with dev-only packages pruned.
+2. **runtime stage**: `node:22.x-alpine`; `COPY --from=build` the pruned `node_modules/` (retains the `prisma` CLI and the generated client), the compiled `dist/` (incl. `dist/src/`), `prisma/`, `entrypoint.sh`, and the frontend `dist/`; create a non-root user, `USER node`; entrypoint runs `node dist/src/server.js`.
 
 **Rationale**:
 - Non-root user satisfies Constitution §IV (Security by Default).
-- `npm ci --omit=dev` in the runtime stage keeps the image small and avoids shipping dev-only packages (Playwright, Vitest, etc.) into production.
-- `prisma generate` must run in the build stage (it emits native bindings into `node_modules/@prisma/client`); the runtime stage inherits that.
+- **Emit path (C1, verified 2026-09-22 via `npm --prefix backend run build`):** `backend/tsconfig.json` has `rootDir: "."` and `include: ["src/**/*.ts","tests/**/*.ts"]`, so `tsc` emits `dist/src/server.js` (and compiles tests into `dist/tests/`). The entrypoint and Dockerfile MUST target `dist/src/server.js`. (Alternative: set `rootDir: "src"` and drop `tests` from `include` to get `dist/server.js` — but that changes the existing toolchain and the `start` script; the verified-path approach is lower risk.)
+- **Prisma at runtime (H1, verified 2026-09-22):** `prisma` is currently a **devDependency**, but `prisma migrate deploy` runs in the prod entrypoint and needs the CLI. Coherent scheme: **move `prisma` to `dependencies`** in `backend/package.json`, run `prisma generate` in the build stage, then `npm prune --omit=dev`; the pruned `node_modules` (copied into the runtime) retains the `prisma` CLI **and** the generated `@prisma/client`. This replaces the earlier incoherent "`npm ci --omit=dev` in an intermediate layer" + "runtime inherits the generated client" description.
 - The `app` image is a **multi-service build**: a frontend build stage produces `dist/`, which is copied into the runtime stage alongside the compiled backend, so the single `app` container serves both the API and the static SPA (see D1/D2).
 
 **Boot-time migrations**: The repo currently has no `prisma/migrations/` directory (development uses `prisma db push`). For the containerized deployment we MUST ensure schema is applied on first boot. Two options:
@@ -107,7 +107,7 @@
 ## D7: Port strategy
 
 **Decision**:
-- **Published (host-visible)**: `8080:80` on the `app` service only. This is the single URL the user opens: `http://localhost:8080`.
+- **Published (host-visible)**: `8080:4000` on the `app` service only (host 8080 → container 4000, where the Express API listens per `PORT=4000`). This is the single URL the user opens: `http://localhost:8080`.
 - **Internal-only (not published)**: `postgres:5432`. Reachable only from within the Compose network (the `app` service connects to it over the internal network).
 - **Dev parity note**: The existing dev flow uses `localhost:5173` (frontend) + `localhost:4000` (API). The containerized flow uses `localhost:8080` for both the SPA and the API (same origin, served by the `app` service). The `VITE_API_URL` env var (currently `http://localhost:4000` default) becomes unnecessary in the containerized build because the SPA and API share an origin. For the host-run e2e suite (clarification Q2), Playwright targets `http://localhost:8080`.
 
@@ -119,9 +119,9 @@
 ## D8: Image base & supply chain
 
 **Decision**:
-- `node:22-alpine` for the app build + runtime (Alpine: small, well-maintained, musl-compatible with Node 22).
-- `postgres:16-alpine` for the DB (already in use; consistent).
-- **No** `latest` tags — all pinned to major.minor for reproducibility (FR-009).
+- `node:22.x-alpine` for the app build + runtime (Alpine: small, well-maintained, musl-compatible with Node 22; pinned to the 22 minor line, not a floating `latest`).
+- `postgres:16.x-alpine` for the DB (already in use; consistent; pinned to the 16 minor line).
+- **No** `latest` tags — all pinned to major.minor for reproducibility (FR-009). (L3: use the minor-pinned `22.x` / `16.x` tags in the Dockerfile/compose, not bare `22` / `16`.)
 - **No** custom base images or internal registries — all from Docker Hub (network required on first pull, per clarification Q3).
 
 **Rationale**:
