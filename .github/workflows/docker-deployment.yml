@@ -16,7 +16,7 @@ on:
 
 jobs:
   containerized-e2e:
-    name: Clean runner: build, start, readiness, e2e
+    name: "Clean runner: build, start, readiness, e2e"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
