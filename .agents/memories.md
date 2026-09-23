@@ -2,11 +2,26 @@
 
 Gifty is a web application designed for tracking and sharing gift lists. Its primary goal is to allow users to curate lists of desired gifts and share them with friends or family. The core innovation is the "surprise" element: while shared recipients can see the claim and purchase status of items to avoid duplicates, the list owner cannot see who has claimed or purchased what, preserving the surprise for them.
 
-## Current Focus: Feature `002-docker-deployment`
+## Completed Feature: `002-docker-deployment` (2026-09-23)
 
-Feature `001-gift-list-sharing` is **COMPLETE** (all 59 backend tests + 8 Playwright e2e tests passing, all tasks marked `[x]`, spec status `Implemented`). The project has moved on to **Docker deployment**: packaging the full application (frontend, backend, database) into containers so it can be started with a single command on any machine with Docker installed.
+**COMPLETE** — all 25 tasks (`T001`–`T025`) marked `[x]` in `specs/002-docker-deployment/tasks.md`, quickstart V1–V8 validated end-to-end, Definition-of-Done checklist ticked, committed on branch `docker-container` (commit `f5903fb`).
 
-**Spec status (as of 2026-09-22)**: `specs/002-docker-deployment/spec.md` is written, clarified (3 clarifications resolved), and validated against the quality checklist (16/16 passing). **No plan or tasks generated yet** — next step is `/speckit-plan`.
+- **Topology**: two-container compose project `gifty` — `app` (serves the SPA static build + API; host `${PORT:-8080}` → container `4000`; non-root `USER node`; `GET /healthz` readiness; `prisma migrate deploy` in `entrypoint.sh` before the server listens) + `postgres` (`postgres:16.9-alpine`, internal-only, **no host ports**, healthcheck `pg_isready`, named volume `gifty_postgres_data`). Single URL: `http://localhost:8080`.
+- **Image**: multi-stage `Dockerfile` (build context = repo root), pinned `node:22.16.0-alpine` for all stages; frontend `npm ci` + `vite build`; backend `npm ci` + `prisma generate` + `tsc` (emits `dist/src/`) + `npm prune --omit=dev`; runtime stage `COPY --from=build` of `node_modules/`, `dist/`, `prisma/`, `frontend/dist/`, `entrypoint.sh`. No secrets baked in (verified via image Env).
+- **Security (Constitution §IV)**: `development-secret` fallback removed — `backend/src/auth/{middleware,router}.ts` read `JWT_SECRET` directly and throw `'JWT_SECRET is required'`; `backend/src/server.ts` now calls `validateConfig()` (from `config/index.ts`) before `app.listen`, so missing/blank `JWT_SECRET` in production fails fast (`Configuration validation failed: JWT_SECRET must be set in production`). Verified: fail-fast restart loop, never serves.
+- **Dev workflow preserved**: `docker-compose.dev.yml` re-exposes `5432` for host-side backend tests; root `npm run dev:db` = `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres`.
+- **Key defects fixed this session**: (1) `Dockerfile` runtime stage had `WORKDIR` written as an `ENV` value → files landed in `/` → `prisma migrate deploy` failed (`Could not load --schema from app/prisma/schema.prisma`); fixed with a real `WORKDIR /app`. (2) `validateConfig` was dead code until wired into `server.ts`. (3) Four stale Playwright assertions (`'Mark as Purchased'` → `'Purchased'`; recipient self-purchase badge resolves to `BY YOU`) — UI was correct; tests updated per user ruling.
+- **Test evidence**: backend **80/80** (host DB via dev-override postgres); frontend e2e **8/8** vs `http://localhost:8080` (`BASE_URL` env, `playwright.config.ts` now reads `BASE_URL`); frontend unit 2/2; duplicate-claim race `[200, 409]`; owner privacy verified in browser + e2e.
+- **Env hygiene**: root `.env` holds the real `JWT_SECRET` (48 chars, git-ignored via `.gitignore:6`); `.env.example` documents the contract; `.env.bak` removed. Temp scripts (`t017.ps1`, `t020.ps1`, `v5-conflict.yml`) cleaned up.
+
+### Prior spec status (superseded)
+Spec was written/clarified/validated 2026-09-22; `plan.md` + `tasks.md` were generated and then fully implemented on 2026-09-23.
+
+---
+
+## Historical: `002-docker-deployment` starting point
+
+Feature `001-gift-list-sharing` is **COMPLETE** (all 59 backend tests + 8 Playwright e2e tests passing, all tasks marked `[x]`, spec status `Implemented`). The project then moved to **Docker deployment**: packaging the full application (frontend, backend, database) into containers so it can be started with a single command on any machine with Docker installed.
 
 ### Key Clarifications (Session 2026-09-22)
 
@@ -58,21 +73,25 @@ The project is being built with a **Node.js/TypeScript backend** (using Express/
 
 ## Observations & Strategy
 
-- **Spec-Driven Development**: Feature `001-gift-list-sharing` was built from `specs/001-gift-list-sharing/` (`spec.md`, `plan.md`, `tasks.md`, `data-model.md`). The active feature is now `002-docker-deployment` (`specs/002-docker-deployment/spec.md` — clarified and validated; `plan.md` and `tasks.md` pending).
-- **Spec Kit Workflow**: Each feature is tracked via its own `tasks.md`. We use `spec-kit` to ensure consistency between the specification, the plan, and the actual tasks. Feature `001` is complete; feature `002` is in the spec/clarify phase.
+- **Spec-Driven Development**: Feature `001-gift-list-sharing` was built from `specs/001-gift-list-sharing/` (`spec.md`, `plan.md`, `tasks.md`, `data-model.md`). Feature `002-docker-deployment` (`specs/002-docker-deployment/`) is **complete** — spec, plan, and tasks all done; see the `002-docker-deployment` section above.
+- **Spec Kit Workflow**: Each feature is tracked via its own `tasks.md`. We use `spec-kit` to ensure consistency between the specification, the plan, and the actual tasks. Both features are complete (2026-09-23); no feature is currently in flight.
 - **Privacy Enforcement (implemented)**: The visibility matrix is enforced at the backend. `backend/src/gift-lists/router.ts` and `backend/src/gift-items/router.ts` strip `claimantUserId`/`purchaserUserId` and force `state: 'available'` when the requester is the list owner, so the owner never sees claim/purchase state. Recipients see full state. The frontend (`GiftItemList.tsx`) additionally hides state/actions from the owner via the `isOwner` prop.
 - **Data Integrity (implemented)**: Atomic state transitions use conditional `updateMany` (e.g., `where: { id, state: 'available' }`) in `backend/src/gift-items/router.ts`, so concurrent claim/purchase/unclaim/unpurchase attempts resolve to exactly one winner. The dedicated concurrency/race test (T032 / SC-004) is implemented and passing in `backend/tests/sc-validation.test.ts`.
 - **Storage (implemented)**: `backend/src/storage.ts` is Prisma-backed (T043 complete). Persistence is covered by `backend/tests/persistence.test.ts`.
 
 ## Next Steps
 
-**Feature `002-docker-deployment`** is the active workstream:
+**No active feature workstream** — both features are complete:
 
-1. **`/speckit-plan`** — Generate the architectural plan (`specs/002-docker-deployment/plan.md`). The spec is ready; this is the immediate next step.
-2. **`/speckit-tasks`** — Break the plan into actionable, dependency-ordered tasks (`specs/002-docker-deployment/tasks.md`).
-3. **`/speckit-implement`** — Execute the tasks: create `Dockerfile`s for backend and frontend, extend `docker-compose.yml` to wire all services together, add the health/readiness endpoint (FR-013), and write the deployment documentation (start/stop/reset commands).
+- `001-gift-list-sharing` — **COMPLETE** (all tasks `[x]`, 59 backend + 8 e2e tests passing).
+- `002-docker-deployment` — **COMPLETE** (all 25 tasks `[x]`, quickstart V1–V8 validated, committed on `docker-container` branch 2026-09-23).
 
-**Feature `001-gift-list-sharing`** is fully complete — no outstanding work.
+**Operational notes for anyone resuming in this repo**:
+- Start the deployed stack: `docker compose up --build -d` → app at `http://localhost:8080` (health: `GET /healthz`).
+- Stop: `docker compose down` (data retained). Reset: `docker compose down -v` (data wiped).
+- Host-side backend tests: `npm run dev:db` (exposes `:5432` via `docker-compose.dev.yml`) → `npx prisma migrate deploy` (from `backend/`) → `npm --prefix backend run test`.
+- Frontend e2e against the container: `BASE_URL=http://localhost:8080 npm --prefix frontend run test:e2e`.
+- The local dev DB was wiped during the V7 reset validation (2026-09-23) — previously documented demo/e2e accounts are gone; fresh accounts are created by tests as needed.
 
 ## Recent Design Work (2026-09-15, not tracked in tasks.md)
 
