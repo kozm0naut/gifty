@@ -1,6 +1,8 @@
 # Project Overview: Gifty
 
 Gifty is a web application designed for tracking and sharing gift lists. Its primary goal is to allow users to curate lists of desired gifts and share them with friends or family. The core innovation is the "surprise" element: while shared recipients can see the claim and purchase status of items to avoid duplicates, the list owner cannot see who has claimed or purchased what, preserving the surprise for them.
+ 
+> **Status snapshot (2026-09-23):** Both features are **COMPLETE** (`001-gift-list-sharing` and `002-docker-deployment`); **no feature is in flight** and the working tree is clean on branch `docker-container`. The app is now deployed as a **single Docker container** (SPA + API + internal Postgres). **Start it with `npm run docker:up`** → http://localhost:8080 (health: `GET /healthz`).
 
 ## Completed Feature: `002-docker-deployment` (2026-09-23)
 
@@ -15,7 +17,7 @@ Gifty is a web application designed for tracking and sharing gift lists. Its pri
 - **Env hygiene**: root `.env` holds the real `JWT_SECRET` (48 chars, git-ignored via `.gitignore:6`); `.env.example` documents the contract; `.env.bak` removed. Temp scripts (`t017.ps1`, `t020.ps1`, `v5-conflict.yml`) cleaned up.
 
 ### Prior spec status (superseded)
-Spec was written/clarified/validated 2026-09-22; `plan.md` + `tasks.md` were generated and then fully implemented on 2026-09-23.
+Spec was written/clarified/validated 2026-09-22; `plan.md` + `tasks.md` were generated and then fully implemented on 2026-09-23. (The spec header's `Status` was corrected to `Implemented` on 2026-09-23.)
 
 ---
 
@@ -77,7 +79,7 @@ The project is being built with a **Node.js/TypeScript backend** (using Express/
 - **Spec Kit Workflow**: Each feature is tracked via its own `tasks.md`. We use `spec-kit` to ensure consistency between the specification, the plan, and the actual tasks. Both features are complete (2026-09-23); no feature is currently in flight.
 - **Privacy Enforcement (implemented)**: The visibility matrix is enforced at the backend. `backend/src/gift-lists/router.ts` and `backend/src/gift-items/router.ts` strip `claimantUserId`/`purchaserUserId` and force `state: 'available'` when the requester is the list owner, so the owner never sees claim/purchase state. Recipients see full state. The frontend (`GiftItemList.tsx`) additionally hides state/actions from the owner via the `isOwner` prop.
 - **Data Integrity (implemented)**: Atomic state transitions use conditional `updateMany` (e.g., `where: { id, state: 'available' }`) in `backend/src/gift-items/router.ts`, so concurrent claim/purchase/unclaim/unpurchase attempts resolve to exactly one winner. The dedicated concurrency/race test (T032 / SC-004) is implemented and passing in `backend/tests/sc-validation.test.ts`.
-- **Storage (implemented)**: `backend/src/storage.ts` is Prisma-backed (T043 complete). Persistence is covered by `backend/tests/persistence.test.ts`.
+- **Storage (implemented)**: All persistence is Prisma-backed, called inline from the routers (T043 complete). The legacy `backend/src/storage.ts` file was **deleted** during the dead-code cleanups (the `makeId` helper now lives in `backend/src/common/id.ts`). Persistence is covered by `backend/tests/persistence.test.ts`.
 
 ## Next Steps
 
@@ -87,8 +89,9 @@ The project is being built with a **Node.js/TypeScript backend** (using Express/
 - `002-docker-deployment` — **COMPLETE** (all 25 tasks `[x]`, quickstart V1–V8 validated, committed on `docker-container` branch 2026-09-23).
 
 **Operational notes for anyone resuming in this repo**:
-- Start the deployed stack: `docker compose up --build -d` → app at `http://localhost:8080` (health: `GET /healthz`).
+- **Start the app (it is now a Docker container): `npm run docker:up`**  *(= `docker compose up --build -d`)* → app at **http://localhost:8080** (health: `GET /healthz`).
 - Stop: `docker compose down` (data retained). Reset: `docker compose down -v` (data wiped).
+- Requires `JWT_SECRET` in the root `.env` (no default; the app fails fast at boot without it).
 - Host-side backend tests: `npm run dev:db` (exposes `:5432` via `docker-compose.dev.yml`) → `npx prisma migrate deploy` (from `backend/`) → `npm --prefix backend run test`.
 - Frontend e2e against the container: `BASE_URL=http://localhost:8080 npm --prefix frontend run test:e2e`.
 - The local dev DB was wiped during the V7 reset validation (2026-09-23) — previously documented demo/e2e accounts are gone; fresh accounts are created by tests as needed.
