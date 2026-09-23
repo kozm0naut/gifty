@@ -57,7 +57,8 @@ Injected at `docker compose up` time. Sourced from a root `.env` (git-ignored) w
   until curl -fs http://localhost:8080/healthz > /dev/null 2>&1; do sleep 1; done
   echo "Gifty is ready at http://localhost:8080"
   ```
-- **Guarantee**: from a clean start, `GET /healthz` returns `200` within **2 minutes** (SC-001, US1).
+  *(Windows PowerShell: `do { Start-Sleep 1 } until (curl.exe -fs http://localhost:8080/healthz | Out-Null)`)*
+- **Guarantee**: once containers are starting, `GET /healthz` returns `200` within **2 minutes** (US1 scenario 1). This budget starts at container start and **excludes first-time image builds** — the separate SC-001 budget (fresh clone → working app, under 10 minutes, build included) covers that.
 
 ## 5. Behavioral guarantees
 

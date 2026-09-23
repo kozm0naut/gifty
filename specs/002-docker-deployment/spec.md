@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-22
 
-**Status**: Draft
+**Status**: Implemented (feature `002-docker-deployment` complete; all tasks in `tasks.md` marked `[x]`)
 
 **Input**: User description: "Make this project run in a docker container"
 
@@ -82,11 +82,6 @@ A new developer or a CI system can build and run the application on a different 
 
 ### Edge Cases
 
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right edge cases.
--->
-
 - What happens when the published port is already in use by another program? → The application startup fails with a clear, human-readable message identifying the port conflict instead of hanging or failing silently.
 - How does the system handle the first start with no data yet, versus subsequent starts with existing data? → First start creates and initializes the data store; later starts reuse it. Both paths must succeed.
 - What happens when the machine's available memory is low? → The application should start within a modest, documented resource envelope so it works on a typical developer laptop without special tuning.
@@ -94,11 +89,6 @@ A new developer or a CI system can build and run the application on a different 
 - What happens when persisted data exists but the application version changed between runs? → The application starts and existing data remains accessible; a failed migration surfaces as a startup failure rather than data loss.
 
 ## Requirements *(mandatory)*
-
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right functional requirements.
--->
 
 ### Functional Requirements
 
@@ -124,11 +114,6 @@ A new developer or a CI system can build and run the application on a different 
 
 ## Success Criteria *(mandatory)*
 
-<!--
-  ACTION REQUIRED: Define measurable success criteria.
-  These must be technology-agnostic and measurable.
--->
-
 ### Measurable Outcomes
 
 - **SC-001**: A user with only Docker installed can go from a fresh clone of the repository to a fully working application in under 10 minutes, following only the documented instructions.
@@ -138,12 +123,6 @@ A new developer or a CI system can build and run the application on a different 
 - **SC-005**: Startup failures (port conflict, storage failure) are reported with a clear, actionable message in 100% of tested failure scenarios, with no silent or data-losing failures.
 
 ## Assumptions
-
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right assumptions based on reasonable defaults
-  chosen when the feature description did not specify certain details.
--->
 
 - Docker (or an equivalent container runtime) is available on the target machine; the deployment does NOT need to support running containers without such a runtime.
 - The target environment is a developer laptop or workstation (not a high-traffic production cluster); resource needs are modest (a few hundred MB of memory is sufficient).

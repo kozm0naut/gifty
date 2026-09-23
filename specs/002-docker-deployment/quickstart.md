@@ -30,6 +30,13 @@ until curl -fs http://localhost:8080/healthz > /dev/null 2>&1; do sleep 1; done
 echo "Gifty is ready at http://localhost:8080"
 ```
 
+**Windows PowerShell equivalent** (setup steps 1–2 are the same; only the wait loop differs):
+
+```powershell
+do { Start-Sleep 1 } until (curl.exe -fs http://localhost:8080/healthz | Out-Null)
+Write-Host "Gifty is ready at http://localhost:8080"
+```
+
 **Expected**: `docker compose up` returns with `postgres` healthy and `app` serving; the readiness loop exits; `curl http://localhost:8080/healthz` returns `200 {"status":"ok"}`. The app is reachable at `http://localhost:8080` within 2 minutes of a clean start (SC-001).
 
 ## Validation Scenarios

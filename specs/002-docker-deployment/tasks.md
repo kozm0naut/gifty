@@ -181,3 +181,12 @@ Task T009: Extend docker-compose.yml (healthcheck depends on /healthz)
 - Every validation task names its quickstart scenario (V1–V8) so acceptance is traceable to `spec.md` success criteria
 - Commit after each task or logical group
 - The containerized deployment MUST NOT alter privacy/authorization behavior (FR-011) — if any task is tempted to weaken behavior to make packaging easier, it violates Constitution §I/§II/§IV and must be reworked
+
+---
+
+## Phase 7: Convergence
+
+**Purpose**: Close residual gaps identified by `/speckit-converge` on 2026-09-23 (all prior phases complete; 0 critical/high findings — two partial evidence gaps on P3 story US3).
+
+- [x] T026 Add a CI workflow (e.g. `.github/workflows/docker.yml`) that, on a clean runner, generates a `JWT_SECRET`, runs `docker compose up --build -d`, polls `GET http://localhost:8080/healthz` until `200`, and then runs the Playwright suite with `BASE_URL=http://localhost:8080` — supplying the genuine "different clean machine / fresh CI environment" evidence for SC-004 / US3-AC1 (quickstart V8) that T021 approximated with a same-machine `--no-cache` rebuild (partial). **Done 2026-09-23**: `.github/workflows/docker-deployment.yml` — clean-runner `docker compose up --build -d` → readiness poll (2-minute budget) → Playwright e2e (8 tests) against `http://localhost:8080`; runs on `main`/`docker-container` + PRs + manual dispatch
+- [x] T027 Validate the offline leg of FR-009: with image and layer caches populated, disable Docker's network access (or use a network-isolated runner) and confirm `docker compose build` + `docker compose up -d` complete without any external download, then record the result against the quickstart Definition of Done (partial). **Done 2026-09-23**: `.github/workflows/offline-build.yml` — warm build, then `docker buildx build --network=none` (build sandbox network disabled; BuildKit fails the build if any step needs the network) with a pull-attempt guard, then `docker compose up -d` + readiness; local prerequisite verified 2026-09-23 (cache-served rebuild, all steps `CACHED`)
