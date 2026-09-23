@@ -115,7 +115,7 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
                 <span className="recipient-name">
                   <span
                     className="avatar recipient-avatar"
-                    style={{ background: getNameColors(p.recipientDisplayName).primary }}
+                    style={{ background: getNameColors(p.recipientDisplayName, true).primary }}
                     title={p.recipientDisplayName}
                   >
                     {getInitials(p.recipientDisplayName)}

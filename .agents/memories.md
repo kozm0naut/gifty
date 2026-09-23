@@ -133,35 +133,7 @@ Addressed the 8 remaining items from the full re-review. **All 59 backend tests 
 
 ## Known Test Accounts (local dev DB)
 
-**Verified against the live `gifty` Postgres DB on 2026-09-22** by bcrypt-comparing each stored hash (via `bcryptjs`, the same library `backend/src/auth/router.ts` uses). 19 of 21 accounts use `Password123!`; the 2 marked **unknown** could not be matched to any common candidate.
-
-> **Stale entries removed (2026-09-22):** the previously documented demo/e2e accounts — `demo@gifty.app`, `jane.doe@example.com`, `alice.e2e@example.com`, `bob.e2e@example.com` — **no longer exist** in the DB (confirmed absent from the `User` table). Do not rely on them for manual/browser testing.
-
-| Email | Display Name | Password | Created |
-|---|---|---|---|
-| `persisted-1789923191786-a8d21f3b7925d8@example.com` | Persisted User | `Password123!` | 2026-09-20 |
-| `x@x.x` | x | **unknown** | 2026-09-21 |
-| `sam.rivera@example.com` | Sam Rivera | **unknown** | 2026-09-21 |
-| `alex.chen@example.com` | Alex Chen | `Password123!` | 2026-09-21 |
-| `priya.patel@example.com` | Priya Patel | `Password123!` | 2026-09-21 |
-| `jordan.lee@example.com` | Jordan Lee | `Password123!` | 2026-09-21 |
-| `maya.thompson@example.com` | Maya Thompson | `Password123!` | 2026-09-21 |
-| `diego.alvarez@example.com` | Diego Alvarez | `Password123!` | 2026-09-21 |
-| `sofia.rossi@example.com` | Sofia Rossi | `Password123!` | 2026-09-21 |
-| `morgan@example.com` | Morgan Hale | `Password123!` | 2026-09-21 |
-| `taylor@example.com` | Taylor Brooks | `Password123!` | 2026-09-21 |
-| `casey@example.com` | Casey Kim | `Password123!` | 2026-09-21 |
-| `t035_owner_1790104517724@example.com` | T035 Owner | `Password123!` | 2026-09-22 |
-| `t035_rec_1790104517724@example.com` | T035 Recipient | `Password123!` | 2026-09-22 |
-| `t036_owner_1790104555698@example.com` | T036 Owner | `Password123!` | 2026-09-22 |
-| `t036_r1_1790104555698@example.com` | T036 Recipient 1 | `Password123!` | 2026-09-22 |
-| `t036_r2_1790104555698@example.com` | T036 Recipient 2 | `Password123!` | 2026-09-22 |
-| `alex.rivera@example.com` | Alex Rivera | `Password123!` | 2026-09-22 |
-| `recipient.two@example.com` | Recipient Two | `Password123!` | 2026-09-22 |
-| `recipient.three@example.com` | Recipient Three | `Password123!` | 2026-09-22 |
-| `oliver.bright@example.com` | Oliver Bright | `Password123!` | 2026-09-22 |
-
-**Good candidates for manual owner/recipient browser testing** (known `Password123!`, non-test names): `alex.chen@example.com`, `priya.patel@example.com`, `jordan.lee@example.com`, `maya.thompson@example.com`, `diego.alvarez@example.com`, `sofia.rossi@example.com`, `morgan@example.com`, `taylor@example.com`, `casey@example.com`.
+None at this time
 
 ## Final Dead-Code Cleanup (2026-09-17)
 

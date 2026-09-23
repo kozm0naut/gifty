@@ -233,7 +233,7 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
             <span
               key={r.id}
               className="avatar"
-              style={{ background: getNameColors(r.recipientDisplayName).primary }}
+              style={{ background: getNameColors(r.recipientDisplayName, true).primary }}
               title={r.recipientDisplayName}
             >
               {getInitials(r.recipientDisplayName)}
@@ -286,7 +286,7 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
                 <li key={r.id} className="avatar-popover-item">
                   <span
                     className="avatar-popover-dot"
-                    style={{ background: getNameColors(r.recipientDisplayName).primary }}
+                    style={{ background: getNameColors(r.recipientDisplayName, true).primary }}
                     aria-hidden="true"
                   />
                   {r.recipientDisplayName}
