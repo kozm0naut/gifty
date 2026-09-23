@@ -230,7 +230,7 @@ textarea {
   width: calc(100% - 2.5rem);
   max-width: 980px;
   margin: 1.25rem auto;
-  padding: 2rem 1.25rem 3rem;
+  padding: 2rem 1.25rem 1rem;
   background: var(--color-surface);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -246,7 +246,7 @@ textarea {
   -webkit-backdrop-filter: none;
   border-color: transparent;
   box-shadow: none;
-  padding: 1rem 1.25rem 3rem;
+  padding: 1rem 1.25rem 1rem;
 }
 
 h1,
@@ -666,7 +666,8 @@ h1 {
 .list-card {
   position: relative;
   overflow: hidden;
-  transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+  /* slower ease-off when the hover leaves */
+  transition: box-shadow 0.55s ease, border-color 0.55s ease, transform 0.55s ease, background 0.55s ease;
 }
 
 .list-card::before {
@@ -683,10 +684,11 @@ h1 {
     inset 1px 1px 1px -1px black,
     0 0 2px var(--card-accent, var(--color-accent)),
     0 0 4px var(--card-accent-2, var(--color-accent));
-  transition: box-shadow 0.25s ease;
+  transition: box-shadow 0.55s ease;
 }
 
 .list-card:hover::before {
+  transition: box-shadow 0.25s ease;
   box-shadow:
     inset 1px 1px 1px -1px black,
     0 0 6px var(--card-accent, var(--color-accent)),
@@ -694,6 +696,8 @@ h1 {
 }
 
 .list-card:hover {
+  /* fast hover-in; base rule's slower timing governs the hover-out */
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
   box-shadow: var(--shadow-md), 0 0 0 1px rgba(168, 85, 247, 0.25);
   border-color: rgba(168, 85, 247, 0.4);
   background: var(--color-surface-2);
