@@ -84,6 +84,24 @@ Deep links (e.g. `/list/<id>`) survive a hard refresh via the SPA fallback.
 - The `app` container runs migrations (`prisma migrate deploy`) on startup, then starts the
   server. A failed migration fails startup without dropping data.
 
+## 3b. Running in GitHub Codespaces (verified working)
+
+Codespaces runs Docker via a DinD sidecar that **drops traffic between containers on a
+compose bridge network** (the app can resolve `postgres` but TCP connects are dropped —
+observed as `prisma migrate deploy` → `P1001` while postgres is healthy). The standard
+`docker-compose.yml` therefore does not work there. Use the dedicated host-networking
+variant instead (same image, same data volume, same `JWT_SECRET` requirement):
+
+```bash
+docker compose -f docker-compose.codespace.yml up --build -d
+until curl -fs http://localhost:8080/healthz > /dev/null 2>&1; do sleep 2; done
+# App at the port-8080 forwarded URL (e.g. <codespace>-8080.app.github.dev)
+```
+
+`network_mode: host` puts both containers in one network namespace: the app reaches
+Postgres over loopback (never filtered) and binds `8080` directly. On Docker Desktop
+(Windows/macOS) the bridge topology works fine — keep using `docker-compose.yml` there.
+
 ## 4. Failure modes and what they mean
 
 | Symptom | Cause / fix |

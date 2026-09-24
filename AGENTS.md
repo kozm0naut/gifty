@@ -13,6 +13,7 @@ The app ships as a single container (SPA + API) on one URL. From the repo root:
 - Stop (keeps data): `docker compose down` • Reset + wipe DB: `docker compose down -v`
 - Requires `JWT_SECRET` in the root `.env` (no default; the app fails fast at boot without it).
 - Data is in the `gifty_postgres_data` volume; Postgres is internal-only (not published to the host).
+- **GitHub Codespaces exception (verified 2026-09-24):** Codespaces DinD drops inter-container bridge traffic, so use `docker compose -f docker-compose.codespace.yml up --build -d` (host networking; app↔Postgres over loopback) instead of `docker compose up`. See `docs/docker.md` §3b.
 
 ### Crucial Files for Context
 - **Project State & Memory**: `.agents/memories.md` tracks progress, current focus, and high-level implementation status.

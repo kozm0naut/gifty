@@ -4,15 +4,19 @@ Gifty is a web application designed for tracking and sharing gift lists. Its pri
  
 > **Status snapshot (2026-09-23):** Both features are **COMPLETE** (`001-gift-list-sharing` and `002-docker-deployment`); **no feature is in flight** and the working tree is clean on branch `docker-container`. The app is now deployed as a **single Docker container** (SPA + API + internal Postgres). **Start it with `npm run docker:up`** → http://localhost:8080 (health: `GET /healthz`).
 
-## Codespaces 502 fix (2026-09-24)
+## Codespaces 502 fix (2026-09-24, CONFIRMED)
 
-**Symptom:** In a GitHub Codespace (branch `main`), the app crash-looped — 4× `prisma migrate deploy` → `P1001: Can't reach database server at postgres:5432` — while postgres was healthy; browser showed 502 and `curl localhost:8080/healthz` gave `rc=56` (mid-restart). Root cause: under **Docker-in-Docker**, the postgres healthcheck (socket-only `pg_isready`) passed before the **TCP path** between containers was routable; the app's first migration attempt failed once and `set -e` killed the entrypoint → crash loop. Local Docker Desktop never reproduces it (warm-up gap is ~ms).
+**Symptom:** In a GitHub Codespace, the app crash-looped — `prisma migrate deploy` → `P1001: Can't reach database server at postgres:5432` on every attempt — while postgres was `healthy`; browser showed 502.
 
-**Fix (uncommitted at time of note):**
-- `entrypoint.sh`: `prisma migrate deploy` now retries up to 12× with 5s backoff; persistent failure still exits 1 (contract §6 fail-fast preserved).
-- `docker-compose.yml`: postgres healthcheck is now `pg_isready -h postgres -U gifty -d gifty` (tests the real TCP path, not the local unix socket).
-- Verified locally from a wiped volume: both containers healthy, `healthz` 200, live signup works.
-- **Retest in Codespace:** `docker compose up --build -d` (rebuilds the image with the new entrypoint) → poll `curl -fs localhost:8080/healthz` → expect ready within ~2 min. If it still fails, capture `docker compose logs app`.
+**Confirmed root cause (Codespace diagnostic, 2026-09-24):** Codespaces' **Docker-in-Docker drops inter-container traffic on user-defined bridge networks**. Evidence from the Codespace: `DNS-OK 172.18.0.2` (name resolves) + postgres healthy on `0.0.0.0:5432` + 12/12 migration attempts `P1001` = DNS works but raw TCP to the bridge IP is **dropped, not refused**. Not a code bug — never reproduces on Docker Desktop (Windows/macOS), where bridge networking works.
+
+**Fix (committed `52c0e70`):**
+- **`docker-compose.codespace.yml` (NEW, the real fix)**: both services run with `network_mode: host`, so the app reaches Postgres over **loopback** `127.0.0.1:5432` (never filtered) and binds 8080 directly. Same image, same `gifty_postgres_data` volume, same required `JWT_SECRET`. **Start in Codespaces:** `docker compose -f docker-compose.codespace.yml up --build -d`.
+- `entrypoint.sh`: `prisma migrate deploy` retries 12× with 5s backoff (helps transient warm-up; does NOT fix the bridge block).
+- `docker-compose.yml`: postgres healthcheck now `pg_isready -h postgres ...` (TCP path, not unix socket).
+- Default `docker-compose.yml` otherwise unchanged — local dev + CI keep the bridge topology.
+
+**Status: CONFIRMED WORKING in a real GitHub Codespace (2026-09-24, user verified).** Docs updated: `docs/docker.md` §3b + `AGENTS.md` note the Codespaces exception.
 
 ## Completed Feature: `002-docker-deployment` (2026-09-23)
 
