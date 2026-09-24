@@ -4,6 +4,16 @@ Gifty is a web application designed for tracking and sharing gift lists. Its pri
  
 > **Status snapshot (2026-09-23):** Both features are **COMPLETE** (`001-gift-list-sharing` and `002-docker-deployment`); **no feature is in flight** and the working tree is clean on branch `docker-container`. The app is now deployed as a **single Docker container** (SPA + API + internal Postgres). **Start it with `npm run docker:up`** → http://localhost:8080 (health: `GET /healthz`).
 
+## Codespaces 502 fix (2026-09-24)
+
+**Symptom:** In a GitHub Codespace (branch `main`), the app crash-looped — 4× `prisma migrate deploy` → `P1001: Can't reach database server at postgres:5432` — while postgres was healthy; browser showed 502 and `curl localhost:8080/healthz` gave `rc=56` (mid-restart). Root cause: under **Docker-in-Docker**, the postgres healthcheck (socket-only `pg_isready`) passed before the **TCP path** between containers was routable; the app's first migration attempt failed once and `set -e` killed the entrypoint → crash loop. Local Docker Desktop never reproduces it (warm-up gap is ~ms).
+
+**Fix (uncommitted at time of note):**
+- `entrypoint.sh`: `prisma migrate deploy` now retries up to 12× with 5s backoff; persistent failure still exits 1 (contract §6 fail-fast preserved).
+- `docker-compose.yml`: postgres healthcheck is now `pg_isready -h postgres -U gifty -d gifty` (tests the real TCP path, not the local unix socket).
+- Verified locally from a wiped volume: both containers healthy, `healthz` 200, live signup works.
+- **Retest in Codespace:** `docker compose up --build -d` (rebuilds the image with the new entrypoint) → poll `curl -fs localhost:8080/healthz` → expect ready within ~2 min. If it still fails, capture `docker compose logs app`.
+
 ## Completed Feature: `002-docker-deployment` (2026-09-23)
 
 **COMPLETE** — all 25 tasks (`T001`–`T025`) marked `[x]` in `specs/002-docker-deployment/tasks.md`, quickstart V1–V8 validated end-to-end, Definition-of-Done checklist ticked, committed on branch `docker-container` (commit `f5903fb`).
@@ -102,9 +112,6 @@ The project is being built with a **Node.js/TypeScript backend** (using Express/
 - **Brand mark redesign**: the logo mark is now a gift-box SVG (magenta `#c026d3` → orange `#f97316` gradient, black `#111` stroke, white ribbon) extracted into a reusable `frontend/src/components/BrandMark.tsx` (uses `useId()` for unique per-instance gradient IDs to avoid collisions). Used in the header brand link (`App.tsx`) and as a large hero on the auth screen (`.auth-brand` / `.auth-brand-mark` / `.auth-brand-title` in `index.css`). **Note**: the user subsequently undid some `AuthPage.tsx` edits and made their own `index.css` changes — re-read both files before further design edits.
 - "Manage Sharing" is a modal on the list page (route `/list/:listId/sharing`), rendered by `frontend/src/components/PermissionManager.tsx` inside `frontend/src/pages/ListPage.tsx`, reached via a button on the list page.
 - List page share UI: circular share icon button (person + plus) with a recipient avatar stack (initials circles, deterministic color per name, +N overflow) to its left; owner-only.
-- Demo data: `demo@gifty.app` (owner) and `jane.doe@example.com` (recipient; both password `Password123!`); "Birthday Bash" list shared with Jane, who has claimed the Espresso Machine.
-- **E2E test accounts (2026-09-15)**: `alice.e2e@example.com` (owner), `bob.e2e@example.com` (recipient), and `jane.doe@example.com` (recipient; all password `Password123!`). Alice's "Alice's Birthday Wishlist" (5 items) is shared with **Jane** (Bob's access was revoked during the T038 permission-revoke test). Final item state after the e2e run: Espresso Machine + Wireless Headphones claimed by Bob; Scented Candle Set, Cookbook, Sneakers available. Bob's "Bob's Housewarming" (2 items) is shared with **Alice + Jane**; Robot Vacuum claimed by **Jane**, Throw Blanket available.
-- ⚠️ **STALE (verified 2026-09-22):** the accounts named above — `demo@gifty.app`, `jane.doe@example.com`, `alice.e2e@example.com`, `bob.e2e@example.com` — **no longer exist** in the local dev DB. The lines above are historical records only; see the corrected "Known Test Accounts" table below for accounts that actually exist and their verified passwords.
 
 ## Bug Fixes (2026-09-16)
 
@@ -133,10 +140,6 @@ Addressed the 8 remaining items from the full re-review. **All 59 backend tests 
 - **Dead prop removed**: `frontend/src/pages/NewListPage.tsx` — removed the unused `onListCreated` prop (never passed by any caller); the component now always navigates to the new list.
 - **Doc fixes**: `specs/001-gift-list-sharing/tasks.md` — replaced the stale "An automated e2e framework is still not set up for regression" line with a note that T035–T038 are automated in Playwright (8 tests). `specs/001-gift-list-sharing/spec.md` — `Status` updated from `Draft` to `Implemented`. `.agents/memories.md` — corrected the `ManageSharingPage.tsx` reference (that file does not exist; the sharing UI is a modal in `ListPage.tsx` via `PermissionManager.tsx`).
 - **Housekeeping**: added `test-results/` to root `.gitignore` and removed the leftover `frontend/test-results/` Playwright artifact.
-
-## Known Test Accounts (local dev DB)
-
-None at this time
 
 ## Final Dead-Code Cleanup (2026-09-17)
 

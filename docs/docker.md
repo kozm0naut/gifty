@@ -92,6 +92,7 @@ Deep links (e.g. `/list/<id>`) survive a hard refresh via the SPA fallback.
 | App container exits/restarts; logs show `JWT_SECRET is required` / `Configuration validation failed` | `JWT_SECRET` is missing or blank in `.env`. Set it (see §1) and `docker compose up -d` again. The app **never** starts with a known/default secret. |
 | `postgres` never becomes healthy | Check `docker compose logs postgres`. Ensure nothing else holds the DB and the volume is intact. The `app` service waits for a healthy DB before starting. |
 | Migration error on startup | Inspect `docker compose logs app`. Existing data is **not** dropped; fix the migration state and restart. |
+| App restarts; logs show `P1001: Can't reach database server at postgres:5432` (browser may show 502) | The TCP path between containers was briefly unavailable at startup — common under **Docker-in-Docker** (e.g., GitHub Codespaces), where the DB's socket-based healthcheck can pass before cross-container routing is up. The entrypoint now retries the migration (12 × 5 s) and self-heals; a clean `docker compose up --build -d` from a fresh state is the usual resolution. If it persists, check `docker compose logs postgres` for connection refusals. |
 
 ## 5. Advanced: backing up the data volume
 
