@@ -1,0 +1,68 @@
+# GitHub Codespaces variant of docker-compose.yml
+#
+# WHY THIS EXISTS: in Codespaces, Docker runs via a DinD sidecar and the
+# codespace network firewall can DROP traffic between containers on the
+# compose bridge network (observed 2026-09-24: postgres healthy, app crash-
+# looped on `prisma migrate deploy` → P1001; DNS resolved but a raw TCP
+# connect to postgres:5432 hung — i.e. inter-container packets are dropped).
+# On Docker Desktop the bridge network works fine, so the default
+# docker-compose.yml is unchanged.
+#
+# FIX: put both services on the `host` network so they share one network
+# namespace. The app then reaches Postgres over loopback (127.0.0.1:5432),
+# which is never filtered, and binds the app port (8080) directly on the
+# codespace network — no published-port DNAT required.
+#
+# Usage (from the repo root, inside the codespace):
+#   docker compose -f docker-compose.codespace.yml up --build -d
+#   until curl -fs http://localhost:8080/healthz > /dev/null 2>&1; do sleep 2; done
+#
+# Data uses the same named volume as the default compose file, so data is
+# shared/compatible between the two variants.
+
+services:
+  postgres:
+    image: postgres:16.9-alpine
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      POSTGRES_DB: gifty
+      POSTGRES_USER: gifty
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gifty_dev_password}
+    volumes:
+      - gifty_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Loopback: verifies the same path the app will use.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U gifty -d gifty"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gifty-app
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      NODE_ENV: production
+      # Host networking: bind the published port directly (no `ports:` needed,
+      # and none is allowed with network_mode: host).
+      PORT: 8080
+      # Reach Postgres over loopback instead of the (filtered) bridge network.
+      DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD:-gifty_dev_password}@127.0.0.1:5432/gifty?schema=public
+      # Required — injected from .env at `up` time; no default is permitted.
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  gifty_postgres_data:
