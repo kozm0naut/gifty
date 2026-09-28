@@ -1,6 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { parseCookie } from 'cookie';
 import { prisma } from '../prisma.js';
+import { loadConfig } from '../config/index.js';
+import { resolveSessionForAccess } from './session.js';
 
 export type AuthenticatedRequest = Request & {
   user?: { id: string; email: string };
@@ -20,17 +23,36 @@ export function getJwtSecret(): string {
 }
 
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  // Accept the legacy `Authorization: Bearer` header OR the `gifty_access`
+  // cookie (feature 003, T007). Bearer keeps the existing 80-test suite
+  // passing; US1 (T017) formally retires the header in a later phase.
   const authHeader = req.headers.authorization ?? '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const cookieToken = parseCookie(req.headers.cookie ?? '')[
+    loadConfig().cookies.accessName
+  ];
+  const token = bearerToken ?? cookieToken;
 
   if (!token) {
     return res.status(401).json({ message: 'Authentication required' });
   }
 
   try {
-    const payload = jwt.verify(token, getJwtSecret()) as { sub: string; email: string };
-    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    const payload = jwt.verify(token, getJwtSecret()) as { sub?: string; email?: string; sid?: string };
+    const userId = typeof payload.sub === 'string' ? payload.sub : null;
 
+    // When the token carries a `sid` claim (cookie-backed session), confirm
+    // the UserSession row is live — reject revoked/expired sessions even
+    // before the token's own `exp` (FR-008). Legacy Bearer tokens without
+    // `sid` skip this check for backward compatibility (T007).
+    if (typeof payload.sid === 'string') {
+      const resolved = await resolveSessionForAccess(token);
+      if (!resolved || resolved.userId !== userId) {
+        return res.status(401).json({ message: 'Your account is no longer active.' });
+      }
+    }
+
+    const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
     if (!user) {
       return res.status(401).json({ message: 'Your account is no longer active.' });
     }
