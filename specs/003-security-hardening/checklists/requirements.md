@@ -73,7 +73,7 @@
 - **Consent-gated identity disclosure (new P1 user story, now US5)**: per user
   direction, sharing no longer broadcasts a recipient's identity to all
   co-recipients immediately. Recipient is identified by email to the owner only,
-  placeholder ("???") to other shared users until a one-time consent prompt on
+  placeholder ("????") to other shared users until a one-time consent prompt on
   first open of the list; consent reveals the display name (owner + co-recipients),
   email stays owner-only. Added FR-021–FR-025 (including FR-024: claimant name on
   items follows consent state; FR-025: owner's email hidden from recipients —
