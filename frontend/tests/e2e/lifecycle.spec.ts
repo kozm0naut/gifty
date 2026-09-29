@@ -24,13 +24,13 @@ test.describe('T025: Lifecycle edge cases (claim, cancel, purchase, reset)', () 
     const recipient = await apiRegister(recipientEmail, E2E_PASSWORD, 'E2E Recipient');
 
     // Owner creates a list with 1 item
-    const { list } = await apiCreateList(owner.token, {
+    const { list } = await apiCreateList(owner.cookie, {
       title: 'E2E Lifecycle List',
     });
-    const item = (await apiCreateItem(owner.token, list.id, { name: 'Robot Vacuum' })).item;
+    const item = (await apiCreateItem(owner.cookie, list.id, { name: 'Robot Vacuum' })).item;
 
     // Owner shares the list with the recipient
-    await apiShareList(owner.token, list.id, recipientEmail);
+    await apiShareList(owner.cookie, list.id, recipientEmail);
 
     // Recipient logs in via UI
     await loginViaUI(page, recipientEmail, E2E_PASSWORD);
@@ -79,13 +79,13 @@ test.describe('T038: Lifecycle & permission UX', () => {
     const recipient = await apiRegister(recipientEmail, E2E_PASSWORD, 'E2E Recipient');
 
     // Owner creates a list with 1 item
-    const { list } = await apiCreateList(owner.token, {
+    const { list } = await apiCreateList(owner.cookie, {
       title: 'E2E Revoke List',
     });
-    const item = (await apiCreateItem(owner.token, list.id, { name: 'Throw Blanket' })).item;
+    const item = (await apiCreateItem(owner.cookie, list.id, { name: 'Throw Blanket' })).item;
 
     // Owner shares the list with the recipient
-    await apiShareList(owner.token, list.id, recipientEmail);
+    await apiShareList(owner.cookie, list.id, recipientEmail);
 
     // Recipient logs in via UI and sees the list
     await loginViaUI(page, recipientEmail, E2E_PASSWORD);
@@ -93,10 +93,10 @@ test.describe('T038: Lifecycle & permission UX', () => {
     await page.waitForSelector('text=Throw Blanket');
 
     // Owner revokes recipient's access via API
-    const { permissions } = await apiFetchSharePermissions(owner.token, list.id);
+    const { permissions } = await apiFetchSharePermissions(owner.cookie, list.id);
     const permission = permissions.find((p) => p.recipientUserId === recipient.user.id);
     if (permission) {
-      await apiRevokePermission(owner.token, list.id, permission.id);
+      await apiRevokePermission(owner.cookie, list.id, permission.id);
     }
 
     // Recipient tries to access the list again

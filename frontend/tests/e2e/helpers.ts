@@ -14,9 +14,25 @@ export interface ApiUser {
   displayName: string;
 }
 
-export interface ApiToken {
+export interface ApiSession {
   user: ApiUser;
-  token: string;
+  /** Serialized `Cookie` request-header value (gifty_access only — the
+   *  gifty_refresh cookie is Path=/auth/refresh and never needed by the API). */
+  cookie: string;
+}
+
+/** Extract the `gifty_access=...` pair from a Node fetch Set-Cookie header
+ *  (multiple cookies arrive as one comma-joined string). */
+function accessCookie(setCookieHeader: string | null | undefined): string {
+  if (!setCookieHeader) throw new Error('no Set-Cookie header in response');
+  const m = setCookieHeader.match(/(?:^|,)\s*gifty_access=([^;]*)/);
+  if (!m) throw new Error('no gifty_access cookie in response');
+  return `gifty_access=${m[1]}`;
+}
+
+/** Build the `Cookie` request header from an access cookie + the session user. */
+function sessionFrom(response: Response, user: ApiUser): ApiSession {
+  return { user, cookie: accessCookie(response.headers.get('set-cookie')) };
 }
 
 export interface ApiItem {
@@ -64,108 +80,124 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   return data as T;
 }
 
-export function apiRegister(email: string, password: string, displayName: string): Promise<ApiToken> {
-  return apiFetch<ApiToken>('/auth/register', {
+export async function apiRegister(
+  email: string,
+  password: string,
+  displayName: string,
+): Promise<ApiSession> {
+  const response = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, displayName }),
   });
+  const data = (await response.json().catch(() => ({}))) as { user: ApiUser };
+  if (!response.ok || !data?.user) {
+    throw new Error(`API ${response.status}: registration failed`);
+  }
+  return sessionFrom(response, data.user);
 }
 
-export function apiLogin(email: string, password: string): Promise<ApiToken> {
-  return apiFetch<ApiToken>('/auth/login', {
+export async function apiLogin(email: string, password: string): Promise<ApiSession> {
+  const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
+  const data = (await response.json().catch(() => ({}))) as { user: ApiUser };
+  if (!response.ok || !data?.user) {
+    throw new Error(`API ${response.status}: login failed`);
+  }
+  return sessionFrom(response, data.user);
 }
 
 export function apiCreateList(
-  token: string,
+  cookie: string,
   payload: { title: string; description?: string },
 ): Promise<{ list: ApiList }> {
   return apiFetch('/lists', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
     body: JSON.stringify(payload),
   });
 }
 
 export function apiCreateItem(
-  token: string,
+  cookie: string,
   listId: string,
   payload: { name: string; description?: string; quantity?: number; unitPrice?: number },
 ): Promise<{ item: ApiItem }> {
   return apiFetch(`/lists/${listId}/items`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
     body: JSON.stringify({ quantity: 1, ...payload }),
   });
 }
 
 export function apiShareList(
-  token: string,
+  cookie: string,
   listId: string,
   recipientEmail: string,
 ): Promise<{ sharePermission: ApiSharePermission }> {
   return apiFetch(`/lists/${listId}/share`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
     body: JSON.stringify({ recipientEmail, permission: 'shared' }),
   });
 }
 
-export function apiClaimItem(token: string, itemId: string): Promise<{ item: ApiItem }> {
+export function apiClaimItem(cookie: string, itemId: string): Promise<{ item: ApiItem }> {
   return apiFetch(`/items/${itemId}/claim`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
   });
 }
 
-export function apiPurchaseItem(token: string, itemId: string): Promise<{ item: ApiItem }> {
+export function apiPurchaseItem(cookie: string, itemId: string): Promise<{ item: ApiItem }> {
   return apiFetch(`/items/${itemId}/purchase`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
   });
 }
 
-export function apiUnclaimItem(token: string, itemId: string): Promise<{ item: ApiItem }> {
+export function apiUnclaimItem(cookie: string, itemId: string): Promise<{ item: ApiItem }> {
   return apiFetch(`/items/${itemId}/unclaim`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
   });
 }
 
-export function apiUnpurchaseItem(token: string, itemId: string): Promise<{ item: ApiItem }> {
+export function apiUnpurchaseItem(cookie: string, itemId: string): Promise<{ item: ApiItem }> {
   return apiFetch(`/items/${itemId}/unpurchase`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
   });
 }
 
-export function apiFetchList(token: string, listId: string): Promise<{ list: ApiList }> {
+export function apiFetchList(cookie: string, listId: string): Promise<{ list: ApiList }> {
   return apiFetch(`/lists/${listId}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
   });
 }
 
-export function apiFetchLists(token: string): Promise<{ lists: ApiList[] }> {
+export function apiFetchLists(cookie: string): Promise<{ lists: ApiList[] }> {
   return apiFetch('/lists', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
   });
 }
 
 export function apiFetchSharePermissions(
-  token: string,
+  cookie: string,
   listId: string,
 ): Promise<{ permissions: ApiSharePermission[] }> {
   return apiFetch(`/lists/${listId}/share-permissions`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
   });
 }
 
-export function apiRevokePermission(token: string, listId: string, permissionId: string): Promise<void> {
+export function apiRevokePermission(cookie: string, listId: string, permissionId: string): Promise<void> {
   return apiFetch(`/lists/${listId}/share/${permissionId}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: cookie },
   });
 }
 

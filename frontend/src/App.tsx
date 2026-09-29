@@ -76,7 +76,13 @@ function AppContent() {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isInitializing } = useAuth();
+  // Wait for the cookie-backed bootstrap (GET /account) before deciding —
+  // otherwise an authenticated user is bounced to /auth on first paint and
+  // back again once the session resolves (the race the old comment warned about).
+  if (isInitializing) {
+    return <div className="loading-row">Loading…</div>;
+  }
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
@@ -85,7 +91,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isInitializing } = useAuth();
+  if (isInitializing) {
+    return <div className="loading-row">Loading…</div>;
+  }
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
   }

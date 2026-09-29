@@ -39,32 +39,35 @@ describe('App login flow', () => {
 
   it('shows the logged-in username immediately after auth succeeds', async () => {
     // Arrange
+    let logged = false;
+    const ALICE = { id: 'user_alice', email: 'alice@example.com', displayName: 'Alice' };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
 
+        // The session now lives in the HttpOnly cookie the server sets on
+        // sign-in; once that has happened, /account resolves the user.
+        if (url.includes('/account')) {
+          if (logged) {
+            return { ok: true, json: async () => ({ user: ALICE }) } as Response;
+          }
+          return { ok: false, status: 401, json: async () => ({ error: 'Authentication required' }) } as Response;
+        }
+
         if (url.includes('/auth/login')) {
+          logged = true;
           return {
             ok: true,
-            json: async () => ({
-              token: 'abc123',
-              user: { displayName: 'Alice' },
-            }),
+            json: async () => ({ user: ALICE }),
           } as Response;
         }
 
         if (url.includes('/lists')) {
-          return {
-            ok: true,
-            json: async () => ({ lists: [] }),
-          } as Response;
+          return { ok: true, json: async () => ({ lists: [] }) } as Response;
         }
 
-        return {
-          ok: true,
-          json: async () => ({}),
-        } as Response;
+        return { ok: true, json: async () => ({}) } as Response;
       }),
     );
 
@@ -97,28 +100,38 @@ describe('App login flow', () => {
   });
 
   it('redirects to the auth page when the session is no longer valid', async () => {
-    // Arrange
-    const storage = window.localStorage;
-    storage.setItem('gift-list-token', 'expired-token');
-    storage.setItem('gift-list-user', JSON.stringify({ id: 'user_1', email: 'alice@example.com', displayName: 'Alice' }));
-
+    // Arrange: a session that the server has revoked (e.g. signed out
+    // elsewhere). Model the realistic mid-page termination: bootstrap OK,
+    // then /lists 401s, the single refresh attempt is rejected with
+    // reason "revoked", and the app must route to sign-in with the plain
+    // (non-security) notice.
+    const ALICE = { id: 'user_1', email: 'alice@example.com', displayName: 'Alice' };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
 
+        if (url.includes('/account')) {
+          return { ok: true, json: async () => ({ user: ALICE }) } as Response;
+        }
+
         if (url.includes('/lists')) {
           return {
             ok: false,
             status: 401,
-            json: async () => ({ message: 'Your account is no longer active.' }),
+            json: async () => ({ error: 'Authentication required' }),
           } as Response;
         }
 
-        return {
-          ok: true,
-          json: async () => ({}),
-        } as Response;
+        if (url.includes('/auth/refresh')) {
+          return {
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'Session is no longer active.', reason: 'revoked' }),
+          } as Response;
+        }
+
+        return { ok: true, json: async () => ({}) } as Response;
       }),
     );
 
@@ -135,17 +148,19 @@ describe('App login flow', () => {
     });
 
     // Act
-    // The dashboard's initial load receives a 401; the app should clear
-    // the stored session and redirect to the auth page.
+    // The dashboard's initial load receives a 401; the single refresh
+    // attempt is rejected ("revoked"), the app clears its session state
+    // and redirects to the sign-in page with the plain (non-security)
+    // FR-027 notice.
     await act(async () => {
-      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
     });
 
     // Assert
     expect(container.textContent).toContain('Login');
-    expect(container.textContent).toContain('Your account is no longer active.');
-    expect(storage.getItem('gift-list-token')).toBeNull();
-    expect(storage.getItem('gift-list-user')).toBeNull();
+    expect(container.textContent).toContain('Your session has expired. Please log in again.');
+    // The revoked reason must NOT surface the security-variant notice.
+    expect(container.textContent).not.toContain('ended for security reasons');
   });
 
   it('shows the password-policy requirement on a weak sign-up password (T018)', async () => {
