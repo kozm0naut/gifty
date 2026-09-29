@@ -147,4 +147,59 @@ describe('App login flow', () => {
     expect(storage.getItem('gift-list-token')).toBeNull();
     expect(storage.getItem('gift-list-user')).toBeNull();
   });
+
+  it('shows the password-policy requirement on a weak sign-up password (T018)', async () => {
+    const POLICY_MESSAGE =
+      'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a symbol.';
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/auth/register')) {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ message: POLICY_MESSAGE }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      }),
+    );
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/auth']}>
+          <App />
+        </MemoryRouter>,
+      );
+    });
+
+    // Switch from the default login mode to register mode.
+    const toggle = Array.from(container.querySelectorAll('button')).find((b) =>
+      /don't have an account/i.test(b.textContent ?? ''),
+    );
+    await act(async () => {
+      fireEvent.click(toggle as HTMLButtonElement);
+    });
+
+    const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement;
+    const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
+    const nameInput = container.querySelector('#auth-name') as HTMLInputElement;
+    const form = container.querySelector('form') as HTMLFormElement;
+
+    fireEvent.change(emailInput, { target: { value: 'weak@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'short' } });
+    fireEvent.change(nameInput, { target: { value: 'Weak User' } });
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    expect(container.textContent).toContain(POLICY_MESSAGE);
+  });
 });

@@ -24,6 +24,28 @@ function toInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
 
+/**
+ * Normalize an operator-supplied font-origin value (FR-004) into a valid CSP
+ * source list. CSP source expressions MUST be space-separated; operators may
+ * write a comma-separated env value (more natural), so accept either and emit
+ * the canonical space-separated form. An empty/blank value falls back to the
+ * app's default font source (the Vite build's Google Fonts host).
+ */
+function normalizeCspFontOrigin(value: string | undefined): string {
+  // An unset OR blank operator value (e.g. `${CSP_FONT_ORIGIN:-}` from compose)
+  // means "use the app's default font source" rather than "allow no fonts".
+  const raw =
+    value && value.trim() !== ''
+      ? value
+      : 'https://fonts.googleapis.com,https://fonts.gstatic.com';
+  return raw
+    .split(',')
+    .flatMap((s) => s.split(/\s+/))
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
 export interface RateLimitConfig {
   /** Sliding window for the per-source and per-account budgets (FR-001). */
   windowMinutes: number;
@@ -58,7 +80,8 @@ export interface Config {
   jwt: { secret: string | undefined; minLength: number };
   cookies: CookieConfig;
   corsOrigins: string[] | undefined;
-  cspFontOrigin: string | undefined;
+  /** CSP `font-src` permitted origin (FR-004). Defaults to the app's font host. */
+  cspFontOrigin: string;
 }
 
 /**
@@ -100,7 +123,12 @@ export function loadConfig(): Config {
       secure: isProduction,
     },
     corsOrigins,
-    cspFontOrigin: process.env.CSP_FONT_ORIGIN || undefined,
+    // FR-004: the app's font source (the Vite build serves the Google Fonts
+    // stylesheet + woff2 binaries). Operator-overridable; both the font
+    // *stylesheet* origin and the font-file origin may be allowed. Normalized
+    // to a valid, space-separated CSP source list. Default keeps the served
+    // app's fonts working.
+    cspFontOrigin: normalizeCspFontOrigin(process.env.CSP_FONT_ORIGIN),
   };
 }
 

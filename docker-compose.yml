@@ -40,6 +40,11 @@ services:
       DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD:-gifty_dev_password}@postgres:5432/gifty?schema=public
       # Required — injected from .env at `up` time; no default is permitted.
       JWT_SECRET: ${JWT_SECRET}
+      # Optional operator settings (US2 trust boundary, FR-003/FR-004):
+      # CORS_ORIGINS — comma-separated allow-list; unset = closed by default.
+      # CSP_FONT_ORIGIN — CSP font-src permitted origin(s); default = Google Fonts.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      CSP_FONT_ORIGIN: ${CSP_FONT_ORIGIN:-}
     ports:
       - "${PORT:-8080}:4000"
     depends_on:

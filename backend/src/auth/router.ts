@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { parseCookie, stringifySetCookie } from 'cookie';
@@ -13,6 +14,13 @@ import {
   resolveSessionForAccess,
 } from './session.js';
 import { recordAuditEvent } from '../audit/events.js';
+import { validatePasswordPolicy } from './password-policy.js';
+import {
+  isRateLimited,
+  recordFailure,
+  retryAfterSeconds,
+  clientIp,
+} from './rate-limit.js';
 
 /**
  * Serialize a Set-Cookie header per the feature 003 contract:
@@ -44,6 +52,31 @@ function clearRefreshCookie(): string {
   return serializeCookie(loadConfig().cookies.refreshName, '', '/auth/refresh', 0);
 }
 
+/**
+ * Precomputed bcrypt hash used ONLY to equalize response timing between an
+ * unknown email and a wrong password (FR-020 constant-time guard). The value
+ * is never a real credential; it exists so both sign-in failure paths perform
+ * exactly one bcrypt.compare and thus land in the same timing class.
+ */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
+  'gifty-timing-equalizer-not-a-real-password',
+  10,
+);
+
+/** Prisma unique-constraint violation (P2002) — the concurrent registration race. */
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === 'P2002';
+}
+
+/** Issue the HttpOnly cookie pair for a live session (T017). */
+function setSessionCookies(res: Response, accessToken: string, refreshToken: string): void {
+  const { cookies } = loadConfig();
+  res.set('Set-Cookie', [
+    serializeCookie(cookies.accessName, accessToken, '/'),
+    serializeCookie(cookies.refreshName, refreshToken, '/auth/refresh'),
+  ]);
+}
+
 export function createAuthRouter() {
   const router = Router();
 
@@ -56,21 +89,88 @@ export function createAuthRouter() {
       }
 
       const normalizedEmail = String(email).trim().toLowerCase();
+      const ip = clientIp(req);
+
+      // Throttle per-source registration failures FIRST (FR-001). The 429 body
+      // mirrors the stable 409 "already exists" signal so a rate-limited source
+      // cannot distinguish "throttled" from "email taken" (FR-020 / SC-002).
+      if (isRateLimited('register-source', ip)) {
+        res.set('Retry-After', String(retryAfterSeconds()));
+        void recordAuditEvent({
+          action: 'auth_rate_limited',
+          outcome: 'failure',
+          ip,
+          targetType: 'auth',
+          detail: { endpoint: 'register' },
+        });
+        return res.status(429).json({ message: 'A user with this email already exists' });
+      }
+
+      // Password policy (FR-002): reject weak passwords with the stable message.
+      const policy = validatePasswordPolicy(String(password));
+      if (!policy.ok) {
+        void recordAuditEvent({
+          action: 'auth_register_failure',
+          outcome: 'denied',
+          ip,
+          targetType: 'auth',
+          detail: { reason: 'weak_password' },
+        });
+        return res.status(400).json({ message: policy.message });
+      }
+
       const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       if (existing) {
+        recordFailure('register-source', ip);
+        void recordAuditEvent({
+          action: 'auth_register_failure',
+          outcome: 'denied',
+          ip,
+          targetType: 'auth',
+          detail: { reason: 'email_exists' },
+        });
         return res.status(409).json({ message: 'A user with this email already exists' });
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
-      const user = await prisma.user.create({
-        data: {
-          id: makeId('user'),
-          email: normalizedEmail,
-          passwordHash,
-          displayName: String(displayName),
-        },
-      });
+      let user;
+      try {
+        user = await prisma.user.create({
+          data: {
+            id: makeId('user'),
+            email: normalizedEmail,
+            passwordHash,
+            displayName: String(displayName),
+          },
+        });
+      } catch (err) {
+        // Concurrent registration of the same email (FR-020 edge case): exactly
+        // one account wins; the loser gets the clean "already exists" signal.
+        if (isUniqueViolation(err)) {
+          recordFailure('register-source', ip);
+          void recordAuditEvent({
+            action: 'auth_register_failure',
+            outcome: 'denied',
+            ip,
+            targetType: 'auth',
+            detail: { reason: 'email_exists' },
+          });
+          return res.status(409).json({ message: 'A user with this email already exists' });
+        }
+        throw err;
+      }
 
+      // Success: open a session, issue the HttpOnly cookie pair (T017), and
+      // retain the legacy `token` bridge until US4 formally retires it.
+      const { accessToken, refreshToken } = await createSession(user.id);
+      void recordAuditEvent({
+        actorUserId: user.id,
+        action: 'auth_register_success',
+        outcome: 'success',
+        ip,
+        targetType: 'auth',
+      });
+      setSessionCookies(res, accessToken, refreshToken);
       const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
         expiresIn: '7d',
       });
@@ -88,17 +188,59 @@ export function createAuthRouter() {
     try {
       const { email, password } = req.body ?? {};
       const normalizedEmail = String(email ?? '').trim().toLowerCase();
+      const ip = clientIp(req);
+
+      // Throttle sign-in on BOTH dimensions (FR-001): per-source (client IP)
+      // and per-account (email — defeats source-IP rotation). A 429 body is
+      // indistinguishable from a failed sign-in (FR-020 / SC-002).
+      if (
+        isRateLimited('login-source', ip) ||
+        (normalizedEmail && isRateLimited('login-account', normalizedEmail))
+      ) {
+        res.set('Retry-After', String(retryAfterSeconds()));
+        void recordAuditEvent({
+          action: 'auth_rate_limited',
+          outcome: 'failure',
+          ip,
+          targetType: 'auth',
+          detail: { endpoint: 'login' },
+        });
+        return res.status(429).json({ message: 'Invalid email or password' });
+      }
+
       const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-      if (!user) {
+      // FR-020 constant-time guard: always perform exactly one bcrypt.compare,
+      // against a dummy hash when the account does not exist, so an unknown
+      // email and a wrong password land in the same timing class.
+      const hashToCheck = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
+      const passwordOk = await bcrypt.compare(String(password ?? ''), hashToCheck);
+
+      if (!user || !passwordOk) {
+        recordFailure('login-source', ip);
+        if (normalizedEmail) recordFailure('login-account', normalizedEmail);
+        void recordAuditEvent({
+          actorUserId: user?.id ?? null,
+          action: 'auth_login_failure',
+          outcome: 'failure',
+          ip,
+          targetType: 'auth',
+          detail: { email: normalizedEmail },
+        });
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
-      const validPassword = await bcrypt.compare(String(password ?? ''), user.passwordHash);
-      if (!validPassword) {
-        return res.status(401).json({ message: 'Invalid email or password' });
-      }
-
+      // Success: open a session, issue the HttpOnly cookie pair (T017), and
+      // retain the legacy `token` bridge until US4 formally retires it.
+      const { accessToken, refreshToken } = await createSession(user.id);
+      void recordAuditEvent({
+        actorUserId: user.id,
+        action: 'auth_login_success',
+        outcome: 'success',
+        ip,
+        targetType: 'auth',
+      });
+      setSessionCookies(res, accessToken, refreshToken);
       const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
         expiresIn: '7d',
       });
