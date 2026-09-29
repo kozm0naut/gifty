@@ -6,7 +6,7 @@ import { loadConfig } from '../config/index.js';
 import { resolveSessionForAccess } from './session.js';
 
 export type AuthenticatedRequest = Request & {
-  user?: { id: string; email: string };
+  user?: { id: string; email: string; displayName: string };
 };
 
 /**
@@ -23,41 +23,42 @@ export function getJwtSecret(): string {
 }
 
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  // Accept the legacy `Authorization: Bearer` header OR the `gifty_access`
-  // cookie (feature 003, T007). Bearer keeps the existing 80-test suite
-  // passing; US1 (T017) formally retires the header in a later phase.
-  const authHeader = req.headers.authorization ?? '';
-  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  const cookieToken = parseCookie(req.headers.cookie ?? '')[
-    loadConfig().cookies.accessName
-  ];
-  const token = bearerToken ?? cookieToken;
+  // Feature 003 (US4 / T012 / T017 / SC-007): the `Authorization: Bearer`
+  // header and the legacy `token` bridge are formally RETIRED. The access
+  // credential is now exclusively the script-unreadable `gifty_access`
+  // HttpOnly cookie (contracts/api.md, FR-009).
+  const cookieToken = parseCookie(req.headers.cookie ?? '')[loadConfig().cookies.accessName];
 
-  if (!token) {
+  if (!cookieToken) {
     return res.status(401).json({ message: 'Authentication required' });
   }
 
   try {
-    const payload = jwt.verify(token, getJwtSecret()) as { sub?: string; email?: string; sid?: string };
+    const payload = jwt.verify(cookieToken, getJwtSecret()) as { sub?: string; email?: string; sid?: string };
     const userId = typeof payload.sub === 'string' ? payload.sub : null;
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid or expired token' });
+    }
 
-    // When the token carries a `sid` claim (cookie-backed session), confirm
-    // the UserSession row is live — reject revoked/expired sessions even
-    // before the token's own `exp` (FR-008). Legacy Bearer tokens without
-    // `sid` skip this check for backward compatibility (T007).
+    // Cookie-backed access JWTs carry the `sid` claim — confirm the
+    // UserSession row is live, rejecting revoked/expired sessions even before
+    // the token's own `exp` (FR-008).
     if (typeof payload.sid === 'string') {
-      const resolved = await resolveSessionForAccess(token);
+      const resolved = await resolveSessionForAccess(cookieToken);
       if (!resolved || resolved.userId !== userId) {
         return res.status(401).json({ message: 'Your account is no longer active.' });
       }
     }
 
-    const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, displayName: true },
+    });
     if (!user) {
       return res.status(401).json({ message: 'Your account is no longer active.' });
     }
 
-    req.user = { id: user.id, email: user.email };
+    req.user = { id: user.id, email: user.email, displayName: user.displayName };
     next();
   } catch (_error) {
     return res.status(401).json({ message: 'Invalid or expired token' });

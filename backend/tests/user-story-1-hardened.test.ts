@@ -1,4 +1,5 @@
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { prisma } from '../src/prisma.js';
 import { createApp } from '../src/app.js';
@@ -65,7 +66,7 @@ describe('US1 hardened sign-in flow (T012, FR-020)', () => {
     expect(max).toBeLessThanOrEqual(min * 10 + 50);
   });
 
-  it('issues HttpOnly cookies on successful login and keeps the bridge token', async () => {
+  it('issues HttpOnly cookies on successful login and no longer returns a token field (US4 bridge retired)', async () => {
     const app = await createApp();
     const email = uniqueEmail('cookies');
     await request(app)
@@ -100,8 +101,30 @@ describe('US1 hardened sign-in flow (T012, FR-020)', () => {
     });
     expect(session).toBeTruthy();
 
-    // Bridge: the legacy token field is retained until US4 formally retires it.
-    expect(res.body.token).toBeTruthy();
+    // US4 (T012/T017/SC-007): the legacy `token` bridge field is formally
+    // retired — the credential is now exclusively the HttpOnly cookie pair.
+    expect(res.body.token).toBeUndefined();
+  });
+
+  it('no longer accepts the legacy Authorization: Bearer header (US4 bridge retired)', async () => {
+    const app = await createApp();
+    const email = uniqueEmail('bearer');
+    await request(app)
+      .post('/auth/register')
+      .send({ email, password: 'Password123!', displayName: 'B' });
+
+    const login = await request(app)
+      .post('/auth/login')
+      .send({ email, password: 'Password123!' });
+    expect(login.status).toBe(200);
+
+    // Even a well-formed JWT presented via the retired Bearer header is
+    // rejected — authentication is now exclusively the gifty_access cookie.
+    const legacy = jwt.sign({ sub: login.body.user.id }, process.env.JWT_SECRET!, { expiresIn: '7d' });
+    const res = await request(app)
+      .get('/lists')
+      .set('Authorization', `Bearer ${legacy}`);
+    expect(res.status).toBe(401);
   });
 
   it('creates exactly one account under concurrent duplicate registration', async () => {

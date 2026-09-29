@@ -5,6 +5,18 @@ import { createApp } from '../src/app.js';
 
 const uniqueEmail = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
 
+/** Extract the `gifty_access` value from a supertest Set-Cookie header. */
+function accessCookie(setCookieHeader: unknown): string {
+  const arr = Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : [];
+  for (const c of arr) {
+    const s = String(c);
+    if (s.startsWith('gifty_access=')) {
+      return s.split(';')[0].slice('gifty_access='.length);
+    }
+  }
+  throw new Error('no gifty_access cookie in response');
+}
+
 describe('User Story 2 - Item Management', () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret';
@@ -24,16 +36,18 @@ describe('User Story 2 - Item Management', () => {
       displayName: 'Owner',
     });
 
+    const ownerCookie = accessCookie(ownerResponse.headers['set-cookie']);
+
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${ownerCookie}`)
       .send({ title: 'Validation List' });
 
     // Act
     // Invalid: Missing name
     const invalidNameResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${ownerCookie}`)
       .send({
         description: 'No name',
         quantity: 1,
@@ -42,7 +56,7 @@ describe('User Story 2 - Item Management', () => {
     // Invalid: Quantity < 1
     const invalidQuantityResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${ownerCookie}`)
       .send({
         name: 'Invalid Quantity',
         quantity: 0,
@@ -51,7 +65,7 @@ describe('User Story 2 - Item Management', () => {
     // Invalid: Negative unit price
     const invalidPriceResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${ownerCookie}`)
       .send({
         name: 'Invalid Price',
         quantity: 1,
@@ -61,7 +75,7 @@ describe('User Story 2 - Item Management', () => {
     // Valid: quantity is optional (FR-003) — omitting it must succeed
     const noQuantityResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${ownerCookie}`)
       .send({
         name: 'No Quantity',
       });
@@ -90,14 +104,16 @@ describe('User Story 2 - Item Management', () => {
       displayName: 'Owner',
     });
 
+    const ownerCookie = accessCookie(ownerResponse.headers['set-cookie']);
+
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${ownerCookie}`)
       .send({ title: 'Immutability List' });
 
     const itemResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${ownerCookie}`)
       .send({
         name: 'Immutable Item',
         quantity: 1,
@@ -109,7 +125,7 @@ describe('User Story 2 - Item Management', () => {
     // Attempt to update
     const updateResponse = await request(app)
       .patch(`/items/${itemId}`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${ownerCookie}`)
       .send({
         name: 'Changed Name',
       });
@@ -117,7 +133,7 @@ describe('User Story 2 - Item Management', () => {
     // Attempt to delete
     const deleteResponse = await request(app)
       .delete(`/items/${itemId}`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`);
+      .set('Cookie', `gifty_access=${ownerCookie}`);
 
     // Assert
     expect(updateResponse.status).toBe(403);

@@ -5,6 +5,18 @@ import { createApp } from '../src/app.js';
 
 const uniqueEmail = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
 
+/** Extract the `gifty_access` value from a supertest Set-Cookie header. */
+function accessCookie(setCookieHeader: unknown): string {
+  const arr = Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : [];
+  for (const c of arr) {
+    const s = String(c);
+    if (s.startsWith('gifty_access=')) {
+      return s.split(';')[0].slice('gifty_access='.length);
+    }
+  }
+  throw new Error('no gifty_access cookie in response');
+}
+
 describe('User Story 1 MVP', () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret';
@@ -28,10 +40,10 @@ describe('User Story 1 MVP', () => {
       .post('/auth/register')
       .send(registerPayload);
 
-    const token = registerResponse.body.token;
+    const token = accessCookie(registerResponse.headers['set-cookie']);
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({
         title: 'Birthday Wishlist',
         description: 'Fun gifts for my birthday',
@@ -39,7 +51,7 @@ describe('User Story 1 MVP', () => {
 
     const itemOneResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({
         name: 'Camera',
         description: 'Pocket camera',
@@ -48,7 +60,7 @@ describe('User Story 1 MVP', () => {
 
     const itemTwoResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({
         name: 'Books',
         description: 'A stack of good reads',
@@ -57,7 +69,7 @@ describe('User Story 1 MVP', () => {
 
     const detailResponse = await request(app)
       .get(`/lists/${listResponse.body.list.id}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Cookie', `gifty_access=${token}`);
 
     // Assert
     expect(registerResponse.status).toBe(201);
@@ -91,15 +103,15 @@ describe('User Story 1 MVP', () => {
       .post('/auth/register')
       .send(registerPayload);
 
-    const token = registerResponse.body.token;
+    const token = accessCookie(registerResponse.headers['set-cookie']);
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({ title: 'Wedding ideas' });
 
     const itemResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({
         name: 'Coffee Maker',
         description: 'For the kitchen',
@@ -109,7 +121,7 @@ describe('User Story 1 MVP', () => {
     const itemId = itemResponse.body.item.id;
     const updateResponse = await request(app)
       .patch(`/items/${itemId}`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({
         name: 'Espresso Machine',
         description: 'Gift for the kitchen',
@@ -117,7 +129,7 @@ describe('User Story 1 MVP', () => {
 
     const deleteResponse = await request(app)
       .delete(`/items/${itemId}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Cookie', `gifty_access=${token}`);
 
     // Assert
     expect(updateResponse.status).toBe(403);
@@ -140,11 +152,11 @@ describe('User Story 1 MVP', () => {
       .post('/auth/register')
       .send(registerPayload);
 
-    const token = registerResponse.body.token;
+    const token = accessCookie(registerResponse.headers['set-cookie']);
 
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({ title: 'Original Title', description: 'Original desc' });
 
     const listId = listResponse.body.list.id;
@@ -152,13 +164,13 @@ describe('User Story 1 MVP', () => {
     // Arrange: add an item so we can assert renaming never drops items.
     await request(app)
       .post(`/lists/${listId}/items`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({ name: 'Existing Item' });
 
     // Act: rename the list
     const renameResponse = await request(app)
       .patch(`/lists/${listId}`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({ title: 'Renamed Title', description: 'Updated description' });
 
     // Assert: rename succeeded and the updated title is returned
@@ -174,7 +186,7 @@ describe('User Story 1 MVP', () => {
     // Assert: the updated title round-trips through GET /lists/:listId
     const detailResponse = await request(app)
       .get(`/lists/${listId}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set('Cookie', `gifty_access=${token}`);
 
     expect(detailResponse.status).toBe(200);
     expect(detailResponse.body.list.title).toBe('Renamed Title');
@@ -187,11 +199,11 @@ describe('User Story 1 MVP', () => {
     const ownerReg = await request(app)
       .post('/auth/register')
       .send({ email: uniqueEmail('owner-r2'), password: 'Password123!', displayName: 'Owner R2' });
-    const ownerToken = ownerReg.body.token;
+    const ownerToken = accessCookie(ownerReg.headers['set-cookie']);
 
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', `gifty_access=${ownerToken}`)
       .send({ title: 'Protected List' });
     const listId = listResponse.body.list.id;
 
@@ -199,12 +211,12 @@ describe('User Story 1 MVP', () => {
     const intruderReg = await request(app)
       .post('/auth/register')
       .send({ email: uniqueEmail('intruder-r2'), password: 'Password123!', displayName: 'Intruder R2' });
-    const intruderToken = intruderReg.body.token;
+    const intruderToken = accessCookie(intruderReg.headers['set-cookie']);
 
     // Act
     const renameResponse = await request(app)
       .patch(`/lists/${listId}`)
-      .set('Authorization', `Bearer ${intruderToken}`)
+      .set('Cookie', `gifty_access=${intruderToken}`)
       .send({ title: 'Hacked Title' });
 
     // Assert
@@ -225,13 +237,13 @@ describe('User Story 1 MVP', () => {
       .post('/auth/register')
       .send(registerPayload);
 
-    const token = registerResponse.body.token;
+    const token = accessCookie(registerResponse.headers['set-cookie']);
     await prisma.user.delete({ where: { id: registerResponse.body.user.id } });
 
     // Act
     const response = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', `gifty_access=${token}`)
       .send({ title: 'Should fail' });
 
     // Assert

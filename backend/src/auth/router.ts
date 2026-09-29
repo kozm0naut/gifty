@@ -160,8 +160,9 @@ export function createAuthRouter() {
         throw err;
       }
 
-      // Success: open a session, issue the HttpOnly cookie pair (T017), and
-      // retain the legacy `token` bridge until US4 formally retires it.
+      // Success: open a session and issue the HttpOnly cookie pair (T017).
+      // The legacy `token` bridge field is formally retired in US4 — the
+      // credential is now exclusively the `gifty_access` cookie.
       const { accessToken, refreshToken } = await createSession(user.id);
       void recordAuditEvent({
         actorUserId: user.id,
@@ -171,13 +172,9 @@ export function createAuthRouter() {
         targetType: 'auth',
       });
       setSessionCookies(res, accessToken, refreshToken);
-      const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
-        expiresIn: '7d',
-      });
 
       return res.status(201).json({
         user: { id: user.id, email: user.email, displayName: user.displayName },
-        token,
       });
     } catch (error) {
       next(error);
@@ -230,8 +227,9 @@ export function createAuthRouter() {
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
-      // Success: open a session, issue the HttpOnly cookie pair (T017), and
-      // retain the legacy `token` bridge until US4 formally retires it.
+      // Success: open a session and issue the HttpOnly cookie pair (T017).
+      // The legacy `token` bridge field is formally retired in US4 — the
+      // credential is now exclusively the `gifty_access` cookie.
       const { accessToken, refreshToken } = await createSession(user.id);
       void recordAuditEvent({
         actorUserId: user.id,
@@ -241,12 +239,8 @@ export function createAuthRouter() {
         targetType: 'auth',
       });
       setSessionCookies(res, accessToken, refreshToken);
-      const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
-        expiresIn: '7d',
-      });
 
       return res.status(200).json({
-        token,
         user: { id: user.id, email: user.email, displayName: user.displayName },
       });
     } catch (error) {

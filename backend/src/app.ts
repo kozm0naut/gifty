@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createAuthRouter } from './auth/router.js';
 import { createListRouter } from './gift-lists/router.js';
 import { createItemRouter } from './gift-items/router.js';
+import { requireAuth, type AuthenticatedRequest } from './auth/middleware.js';
 import { loadConfig, validateConfig } from './config/index.js';
 import { errorHandler } from './common/errors.js';
 
@@ -100,6 +101,24 @@ export async function createApp(): Promise<Express> {
   app.use('/auth', createAuthRouter());
   app.use('/lists', createListRouter());
   app.use('/', createItemRouter());
+
+  // GET /account — the caller's own profile (feature 003 contract). Now
+  // cookie-authenticated; this is the endpoint the client uses to bootstrap
+  // its session from the HttpOnly `gifty_access` cookie (US4 / T027).
+  app.get(
+    '/account',
+    requireAuth,
+    (req: AuthenticatedRequest, res: Response) => {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ message: 'Authentication required' });
+        return;
+      }
+      res.status(200).json({
+        user: { id: user.id, email: user.email, displayName: user.displayName },
+      });
+    },
+  );
 
   // Production static serving (research D2/D12): when running with
   // NODE_ENV=production and a frontend build is present, serve the SPA

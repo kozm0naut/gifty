@@ -5,6 +5,18 @@ import { createApp } from '../src/app.js';
 
 const uniqueEmail = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
 
+/** Extract the `gifty_access` value from a supertest Set-Cookie header. */
+function accessCookie(setCookieHeader: unknown): string {
+  const arr = Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : [];
+  for (const c of arr) {
+    const s = String(c);
+    if (s.startsWith('gifty_access=')) {
+      return s.split(';')[0].slice('gifty_access='.length);
+    }
+  }
+  throw new Error('no gifty_access cookie in response');
+}
+
 describe('Storage persistence', () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret';
@@ -24,9 +36,11 @@ describe('Storage persistence', () => {
       displayName: 'Persisted User',
     });
 
+    const cookie = accessCookie(owner.headers['set-cookie']);
+
     const listResponse = await request(firstApp)
       .post('/lists')
-      .set('Authorization', `Bearer ${owner.body.token}`)
+      .set('Cookie', `gifty_access=${cookie}`)
       .send({
         title: 'Persistent List',
         description: 'Should survive restart',
@@ -36,7 +50,7 @@ describe('Storage persistence', () => {
     const secondApp = await createApp();
     const dashboardResponse = await request(secondApp)
       .get('/lists')
-      .set('Authorization', `Bearer ${owner.body.token}`);
+      .set('Cookie', `gifty_access=${cookie}`);
 
     // Assert
     expect(listResponse.status).toBe(201);
