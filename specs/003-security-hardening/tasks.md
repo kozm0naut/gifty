@@ -93,12 +93,12 @@ Web app: `backend/src/`, `frontend/src/`, `backend/tests/`, `frontend/tests/e2e/
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T022 [US3] Boot-gate tests in `backend/tests/unit/boot-gate.test.ts`: production context fails (non-zero) for missing `JWT_SECRET`, < 32-char `JWT_SECRET`, and a known-default `JWT_SECRET`, and for the known-default `POSTGRES_PASSWORD` — each failure message names the offending value and what must change (FR-005); a strong secret + non-default DB credential starts (US3 acceptance scenario 4); local development is not blocked by production-only rules (edge case "Weak secret in a non-production context")
+- [x] T022 [US3] Boot-gate tests in `backend/tests/unit/boot-gate.test.ts`: production context fails (non-zero) for missing `JWT_SECRET`, < 32-char `JWT_SECRET`, and a known-default `JWT_SECRET`, and for the known-default `POSTGRES_PASSWORD` — each failure message names the offending value and what must change (FR-005); a strong secret + non-default DB credential starts (US3 acceptance scenario 4); local development is not blocked by production-only rules (edge case "Weak secret in a non-production context")
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Extend `validateConfig()` in `backend/src/config/index.ts` (enforced from `backend/src/server.ts`): production context refuses to boot when `JWT_SECRET` is missing, below 32 characters, or a known default, and when the database credential is a known default; each refusal message identifies which value failed and what must change (FR-005/FR-006); production-vs-development distinguished by the existing environment signal (Assumptions)
-- [ ] T024 [US3] Remove the `POSTGRES_PASSWORD` default (`gifty_dev_password`) from `docker-compose.yml` — require the credential via the environment in production (FR-006, plan.md Constraints); verify `docker-compose.codespace.yml` and `docker-compose.dev.yml` remain usable for development
+- [x] T023 [US3] Extend `validateConfig()` in `backend/src/config/index.ts` (enforced from `backend/src/server.ts`): production context refuses to boot when `JWT_SECRET` is missing, below 32 characters, or a known default, and when the database credential is a known default; each refusal message identifies which value failed and what must change (FR-005/FR-006); production-vs-development distinguished by the existing environment signal (Assumptions)
+- [x] T024 [US3] Remove the `POSTGRES_PASSWORD` default (`gifty_dev_password`) from `docker-compose.yml` — require the credential via the environment in production (FR-006, plan.md Constraints); verify `docker-compose.codespace.yml` and `docker-compose.dev.yml` remain usable for development
 
 **Checkpoint**: Insecure configurations cannot boot in production. Validate independently (T022 green; `npm run docker:up` still starts with an explicit strong secret).
 

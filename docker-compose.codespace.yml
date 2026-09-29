@@ -28,7 +28,8 @@ services:
     environment:
       POSTGRES_DB: gifty
       POSTGRES_USER: gifty
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gifty_dev_password}
+      # REQUIRED — no default (FR-006); the operator supplies a strong credential.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - gifty_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -51,7 +52,8 @@ services:
       # and none is allowed with network_mode: host).
       PORT: 8080
       # Reach Postgres over loopback instead of the (filtered) bridge network.
-      DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD:-gifty_dev_password}@127.0.0.1:5432/gifty?schema=public
+      # ${POSTGRES_PASSWORD} is REQUIRED (no default; FR-006) from the operator env.
+      DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD}@127.0.0.1:5432/gifty?schema=public
       # Required — injected from .env at `up` time; no default is permitted.
       JWT_SECRET: ${JWT_SECRET}
     depends_on:

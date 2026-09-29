@@ -172,14 +172,38 @@ export function validateConfig(): void {
       );
     }
 
+    // FR-006: the database credential MUST NOT be a known default. The
+    // credential may be supplied as the standalone `POSTGRES_PASSWORD` env or
+    // embedded in `DATABASE_URL`; check whichever is present and name the
+    // offending source in the remedy (FR-005).
     const dbUrl = process.env.DATABASE_URL ?? '';
-    const passwordMatch = dbUrl.match(/:[^:@/]+@/);
-    const password = passwordMatch ? passwordMatch[0].slice(1, -1) : '';
-    if (password && KNOWN_DEFAULT_SECRETS.has(password)) {
-      errors.push(
-        'The database credential (POSTGRES_PASSWORD / DATABASE_URL password) ' +
-          'must not be the known default; set an explicit, operator-supplied credential',
-      );
+    const urlPasswordMatch = dbUrl.match(/:[^:@/]+@/);
+    const urlPassword = urlPasswordMatch
+      ? urlPasswordMatch[0].slice(1, -1)
+      : undefined;
+    const pgPassword =
+      process.env.POSTGRES_PASSWORD &&
+      process.env.POSTGRES_PASSWORD.trim() !== ''
+        ? process.env.POSTGRES_PASSWORD
+        : undefined;
+
+    const credentialSources: { label: string; value: string }[] = [];
+    if (pgPassword !== undefined) {
+      credentialSources.push({ label: 'POSTGRES_PASSWORD', value: pgPassword });
+    }
+    if (urlPassword !== undefined && urlPassword !== '') {
+      credentialSources.push({
+        label: 'DATABASE_URL password',
+        value: urlPassword,
+      });
+    }
+    for (const { label, value } of credentialSources) {
+      if (KNOWN_DEFAULT_SECRETS.has(value)) {
+        errors.push(
+          `The database credential (${label}) must not be the known default ` +
+            `"${value}"; set an explicit, operator-supplied POSTGRES_PASSWORD`,
+        );
+      }
     }
   }
 
