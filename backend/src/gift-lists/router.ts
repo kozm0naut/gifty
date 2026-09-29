@@ -3,19 +3,35 @@ import { prisma } from '../prisma.js';
 import { makeId } from '../common/id.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/middleware.js';
 import { authorizeList } from '../auth/middleware.js';
-import { resolveIdentityNames, decorateItemIdentity } from '../common/identity.js';
+import {
+  ANONYMOUS_DISPLAY_NAME,
+  decorateItemIdentity,
+  resolveConsentedIdentityNames,
+} from '../common/identity.js';
+import { recordAuditEvent } from '../audit/events.js';
 
-async function withOwnerIdentity(list: { ownerUserId: string }) {
+/**
+ * Attach the owner identity for a list, honoring feature 003 (US5, FR-025 /
+ * SC-008): the owner's email is NEVER sent to recipients. The viewer-aware
+ * `viewerId` decides which owner fields are exposed:
+ *  - owner (viewerId === ownerUserId): id, displayName, email;
+ *  - any recipient: id, displayName only (no email).
+ */
+async function withOwnerIdentity(list: { ownerUserId: string }, viewerId?: string) {
   const owner = await prisma.user.findUnique({
     where: { id: list.ownerUserId },
     select: { id: true, displayName: true, email: true },
   });
   const { ownerUserId, ...rest } = list;
+  if (!owner) {
+    return { ...rest, owner: null };
+  }
+  const isOwner = viewerId !== undefined && viewerId === owner.id;
   return {
     ...rest,
-    owner: owner
+    owner: isOwner
       ? { id: owner.id, displayName: owner.displayName, email: owner.email }
-      : null,
+      : { id: owner.id, displayName: owner.displayName },
   };
 }
 
@@ -51,17 +67,24 @@ export function createListRouter() {
     }));
 
     // Shared lists (the requester is a recipient): keep full state AND resolve
-    // the claimant display name so shared recipients can see who acted.
-    const sharedItems = sharedLists.flatMap((list) => list.items ?? []);
-    const identityNames = await resolveIdentityNames(sharedItems);
-    const decoratedSharedLists = sharedLists.map((list) => ({
-      ...list,
-      items: decorateItemIdentity(list.items ?? [], identityNames),
-    }));
+    // the claimant display name per list, honoring name-disclosure consent
+    // (FR-021/FR-024): a claimant's name appears only when they consented
+    // `revealed` on THAT list, otherwise the `????` placeholder.
+    const decoratedSharedLists = await Promise.all(
+      sharedLists.map(async (list) => ({
+        ...list,
+        items: decorateItemIdentity(
+          list.items ?? [],
+          await resolveConsentedIdentityNames(list.items ?? [], list.id),
+        ),
+      })),
+    );
 
     const allLists = [...suppressedOwnedLists, ...decoratedSharedLists];
 
-    const listsWithOwner = await Promise.all(allLists.map((list) => withOwnerIdentity(list)));
+    const listsWithOwner = await Promise.all(
+      allLists.map((list) => withOwnerIdentity(list, req.user!.id)),
+    );
     res.status(200).json({
       lists: listsWithOwner,
     });
@@ -83,7 +106,7 @@ export function createListRouter() {
         },
       });
 
-      const listWithOwner = await withOwnerIdentity(newList);
+      const listWithOwner = await withOwnerIdentity(newList, req.user!.id);
       return res.status(201).json({ list: listWithOwner });
     } catch (error) {
       next(error);
@@ -124,12 +147,15 @@ export function createListRouter() {
         state: 'available',
       }));
     } else {
-      // Recipient view (FR-009): full state + resolved claimant name.
-      const identityNames = await resolveIdentityNames(updated.items);
-      visibleItems = decorateItemIdentity(updated.items, identityNames);
+      // Recipient view (FR-009): full state + consent-aware claimant name
+      // (FR-021/FR-024).
+      visibleItems = decorateItemIdentity(
+        updated.items,
+        await resolveConsentedIdentityNames(updated.items, updated.id),
+      );
     }
 
-    const listWithOwner = await withOwnerIdentity(updated);
+    const listWithOwner = await withOwnerIdentity(updated, req.user!.id);
     return res.status(200).json({ list: { ...listWithOwner, items: visibleItems } });
   });
 
@@ -142,19 +168,42 @@ export function createListRouter() {
       return res.status(404).json({ message: 'List not found' });
     }
 
-    let targetUserId = recipientUserId;
+    // Feature 003 (US5, FR-010/FR-011, SC-009): the response to a registered
+    // recipient and to an unregistered email must be INDISTINGUISHABLE —
+    // same status, same body shape. Only the underlying record differs:
+    // registered users get a SharePermission row (the email is stored as the
+    // invite email for the owner's view); unregistered emails get a
+    // PendingInvitation that converts transactionally at registration.
+    const emailProvided = Boolean(recipientEmail && typeof recipientEmail === 'string');
+    let normalizedEmail = emailProvided
+      ? (recipientEmail as string).trim().toLowerCase()
+      : null;
 
-    if (recipientEmail && typeof recipientEmail === 'string') {
-      const normalizedEmail = recipientEmail.trim().toLowerCase();
+    // Resolve the recipient's user id when the account already exists.
+    let targetUserId: string | null | undefined =
+      recipientUserId && typeof recipientUserId === 'string' ? recipientUserId : null;
+
+    if (targetUserId === null && normalizedEmail) {
       const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-      if (!user) {
-        return res.status(404).json({ message: 'Recipient user with this email not found' });
+      if (user) {
+        targetUserId = user.id;
       }
-      targetUserId = user.id;
     }
 
-    if (!targetUserId || typeof targetUserId !== 'string') {
+    if (!targetUserId && !normalizedEmail) {
       return res.status(400).json({ message: 'Recipient identifier (userId or email) is required' });
+    }
+
+    // For a resolved user, the invite email is the source of truth for the
+    // owner's sharing view (FR-011/FR-025). If the caller shared by userId
+    // rather than email, populate it from the account so the owner always sees
+    // the recipient's email.
+    if (targetUserId && !normalizedEmail) {
+      const recipientUser = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { email: true },
+      });
+      normalizedEmail = recipientUser?.email ?? null;
     }
 
     if (targetUserId === req.user!.id) {
@@ -165,24 +214,76 @@ export function createListRouter() {
       return res.status(400).json({ message: 'Permission must be shared' });
     }
 
-    const sharePermission = await prisma.sharePermission.upsert({
+    if (targetUserId) {
+      // Registered recipient (or explicit userId): SharePermission row.
+      // A re-invite after revocation is a FRESH permission with consent
+      // reset to `pending` (edge case: consent is per-invite).
+      const existing = await prisma.sharePermission.findUnique({
+        where: {
+          giftListId_recipientUserId: {
+            giftListId: listId,
+            recipientUserId: targetUserId,
+          },
+        },
+      });
+
+      let sharePermission;
+      let created = false;
+      if (existing) {
+        sharePermission = await prisma.sharePermission.update({
+          where: { id: existing.id },
+          data: { permission: 'shared' },
+        });
+      } else {
+        created = true;
+        sharePermission = await prisma.sharePermission.create({
+          data: {
+            id: makeId('share'),
+            giftListId: listId,
+            ownerUserId: req.user!.id,
+            recipientUserId: targetUserId,
+            permission: 'shared',
+            nameDisclosureConsent: 'pending',
+            recipientEmail: normalizedEmail ?? undefined,
+          },
+        });
+      }
+
+      return res
+        .status(created ? 201 : 200)
+        .json({ sharePermission: { ...sharePermission } });
+    }
+
+    // Unregistered email: PendingInvitation (normalized email). Always a
+    // 201 with the SAME body shape as the registered path — no 404, no
+    // different status — so an attacker cannot probe which emails exist
+    // (SC-009). The synthetic sharePermission mirrors the real one except
+    // for the not-yet-existing recipient identity.
+    const invitation = await prisma.pendingInvitation.upsert({
       where: {
-        giftListId_recipientUserId: {
+        giftListId_inviteeEmail: {
           giftListId: listId,
-          recipientUserId: targetUserId,
+          inviteeEmail: normalizedEmail as string,
         },
       },
-      update: { permission: 'shared' },
+      update: { status: 'pending' },
       create: {
-        id: makeId('share'),
+        id: makeId('invite'),
         giftListId: listId,
+        inviteeEmail: normalizedEmail as string,
         ownerUserId: req.user!.id,
-        recipientUserId: targetUserId,
-        permission: 'shared',
+        status: 'pending',
       },
     });
 
-    return res.status(sharePermission.createdAt ? 201 : 200).json({ sharePermission });
+    return res.status(201).json({
+      sharePermission: {
+        id: invitation.id,
+        permission: 'shared',
+        recipientUserId: null,
+        recipientEmail: invitation.inviteeEmail,
+      },
+    });
   });
 
   router.delete('/:listId/share/:permissionId', authorizeList('manage'), async (req: AuthenticatedRequest, res) => {
@@ -216,26 +317,101 @@ export function createListRouter() {
       return res.status(404).json({ message: 'List not found' });
     }
 
-    const permissions = await prisma.sharePermission.findMany({
-      where: { giftListId: listId },
-      include: {
-        recipient: {
-          select: {
-            id: true,
-            displayName: true,
+    // Owner-only sharing view (FR-011/FR-025): the owner sees the recipient
+    // display names, the invite emails (source of truth), each recipient's
+    // name-disclosure consent state, and any pending invitations.
+    const [permissions, pendingInvitations] = await Promise.all([
+      prisma.sharePermission.findMany({
+        where: { giftListId: listId },
+        include: {
+          recipient: {
+            select: {
+              id: true,
+              displayName: true,
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.pendingInvitation.findMany({ where: { giftListId: listId } }),
+    ]);
 
     const formattedPermissions = permissions.map((p) => ({
       id: p.id,
       recipientUserId: p.recipientUserId,
       recipientDisplayName: p.recipient.displayName,
       permission: p.permission,
+      recipientEmail: p.recipientEmail,
+      consent: p.nameDisclosureConsent,
     }));
 
-    res.status(200).json({ permissions: formattedPermissions });
+    res.status(200).json({ permissions: formattedPermissions, pendingInvitations });
+  });
+
+  // Feature 003 (US5, FR-021/FR-022/FR-023): name-disclosure consent.
+  // The consent choice belongs to the RECIPIENT — even the list owner gets a
+  // 403 here (it is not owner-queryable data). Consent is identity-only: it
+  // never grants or revokes view/claim access.
+  router.get('/:listId/consent', async (req: AuthenticatedRequest, res) => {
+    const listId = Array.isArray(req.params.listId) ? req.params.listId[0] : req.params.listId;
+
+    const list = await prisma.giftList.findUnique({ where: { id: listId }, select: { id: true } });
+    if (!list) {
+      return res.status(404).json({ message: 'List not found' });
+    }
+
+    const permission = await prisma.sharePermission.findUnique({
+      where: {
+        giftListId_recipientUserId: { giftListId: listId, recipientUserId: req.user!.id },
+      },
+    });
+    if (!permission) {
+      return res.status(403).json({ message: 'You do not have access to this list' });
+    }
+
+    // The caller's own display name — always visible to themselves.
+    return res.status(200).json({
+      consent: permission.nameDisclosureConsent,
+      displayName: req.user!.displayName,
+    });
+  });
+
+  router.post('/:listId/consent', async (req: AuthenticatedRequest, res) => {
+    const listId = Array.isArray(req.params.listId) ? req.params.listId[0] : req.params.listId;
+    const { consent } = req.body ?? {};
+
+    if (consent !== 'revealed' && consent !== 'declined') {
+      return res.status(400).json({ message: "Consent must be 'revealed' or 'declined'" });
+    }
+
+    const list = await prisma.giftList.findUnique({ where: { id: listId }, select: { id: true } });
+    if (!list) {
+      return res.status(404).json({ message: 'List not found' });
+    }
+
+    const permission = await prisma.sharePermission.findUnique({
+      where: {
+        giftListId_recipientUserId: { giftListId: listId, recipientUserId: req.user!.id },
+      },
+    });
+    if (!permission) {
+      return res.status(403).json({ message: 'You do not have access to this list' });
+    }
+
+    await prisma.sharePermission.update({
+      where: { id: permission.id },
+      data: { nameDisclosureConsent: consent },
+    });
+
+    void recordAuditEvent({
+      actorUserId: req.user!.id,
+      action: 'consent_updated',
+      outcome: 'success',
+      targetType: 'giftList',
+      targetId: listId,
+      detail: { consent },
+    });
+
+    return res.status(200).json({ consent });
   });
 
   // Recipient-facing endpoint: returns the other recipients on the list so any
@@ -262,11 +438,27 @@ export function createListRouter() {
       },
     });
 
-    const recipients = permissions.map((p) => ({
-      id: p.id,
-      recipientUserId: p.recipientUserId,
-      recipientDisplayName: p.recipient.displayName,
-    }));
+    const isOwner = list.ownerUserId === req.user!.id;
+
+    // Feature 003 (US5, FR-024 / SC-008): a co-recipient only sees another
+    // recipient's display name when THAT recipient has consented `revealed`
+    // on this list. The recipient always sees their own name (it is their
+    // own identity), and the owner always sees names (the owner's sharing
+    // view is the source of truth).
+    const recipients = permissions.map((p) => {
+      const ownEntry = p.recipientUserId === req.user!.id;
+      const visibleName =
+        isOwner ||
+        ownEntry ||
+        p.nameDisclosureConsent === 'revealed'
+          ? p.recipient.displayName
+          : ANONYMOUS_DISPLAY_NAME;
+      return {
+        id: p.id,
+        recipientUserId: p.recipientUserId,
+        recipientDisplayName: visibleName,
+      };
+    });
 
     res.status(200).json({ recipients });
   });
@@ -292,12 +484,15 @@ export function createListRouter() {
         state: 'available',
       }));
     } else {
-      // Recipient view (FR-009): full state + resolved claimant name.
-      const identityNames = await resolveIdentityNames(list.items);
-      visibleItems = decorateItemIdentity(list.items, identityNames);
+      // Recipient view (FR-009): full state + consent-aware claimant name
+      // (FR-021/FR-024).
+      visibleItems = decorateItemIdentity(
+        list.items,
+        await resolveConsentedIdentityNames(list.items, list.id),
+      );
     }
 
-    const listWithOwner = await withOwnerIdentity(list);
+    const listWithOwner = await withOwnerIdentity(list, req.user!.id);
     return res.status(200).json({ list: { ...listWithOwner, items: visibleItems } });
   });
 

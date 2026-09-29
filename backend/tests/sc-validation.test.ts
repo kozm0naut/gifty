@@ -280,6 +280,14 @@ describe('SC-005: Owner privacy boundary', () => {
     await claimItem(app, r1, itemId);
     await purchaseItem(app, r1, itemId);
 
+    // US5 (FR-021/FR-024): the claimant's name is only visible to co-recipients
+    // after the claimant consents to name disclosure on this list.
+    const consentRes = await request(app)
+      .post(`/lists/${listId}/consent`)
+      .set('Cookie', `gifty_access=${r1.access}`)
+      .send({ consent: 'revealed' });
+    expect(consentRes.status).toBe(200);
+
     // Recipient view via GET /lists/:listId
     const listView = await request(app)
       .get(`/lists/${listId}`)

@@ -8,6 +8,7 @@ import {
   apiClaimItem,
   loginViaUI,
   logoutViaUI,
+  dismissConsentPromptIfPresent,
   uniqueEmail,
 } from './helpers';
 
@@ -33,6 +34,9 @@ test.describe('T044: Persistence across sessions', () => {
     await loginViaUI(page, recipientEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     await page.waitForSelector('text=Sneakers');
+
+    // US5: acknowledge the one-time name-disclosure prompt before interacting.
+    await dismissConsentPromptIfPresent(page);
 
     const card = page.locator('.card', { hasText: 'Sneakers' });
     await card.locator('button', { hasText: 'Claim' }).click();

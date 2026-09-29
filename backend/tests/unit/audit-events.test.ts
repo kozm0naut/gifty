@@ -81,10 +81,16 @@ describe('recordAuditEvent (T009)', () => {
     expect(data.detail.list).toEqual([{ safe: 'ok' }]);
   });
 
-  it('accepts all 13 action values from data-model.md', async () => {
+  it('accepts every action value in the audit action set', async () => {
     (prisma.auditEvent.create as any).mockResolvedValue({ id: 'audit-3' });
 
-    expect(AUDIT_ACTIONS).toHaveLength(13);
+    // 13 actions from the original security-hardening baseline (data-model.md)
+    // plus the two US5 (consent) actions: `consent_updated` and
+    // `invitation_matched`. Both are security-relevant, so FR-013 requires a
+    // recordable audit action for each.
+    expect(AUDIT_ACTIONS).toHaveLength(15);
+    expect(AUDIT_ACTIONS).toContain('consent_updated');
+    expect(AUDIT_ACTIONS).toContain('invitation_matched');
     for (const action of AUDIT_ACTIONS) {
       (prisma.auditEvent.create as any).mockClear();
       await recordAuditEvent({ action, outcome: 'success' });

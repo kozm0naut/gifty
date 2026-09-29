@@ -55,7 +55,7 @@ in this feature (clarification Q2).
 |---|---|---|
 | `id` | `String` (uuid) | PK |
 | `actorUserId` | `String?` | FK → `User.id`, `onDelete: SetNull` — nullable because **failed/denied** auth attempts have no (or a to-be-deleted) account; removal itself is recorded with the actor |
-| `action` | `String` | one of: `auth_login_success`, `auth_login_failure`, `auth_register_success`, `auth_register_failure`, `auth_rate_limited`, `list_share`, `list_revoke`, `item_claim`, `item_purchase`, `item_revert`, `account_removal`, `session_revoked`, `session_reuse_detected` |
+| `action` | `String` | one of: `auth_login_success`, `auth_login_failure`, `auth_register_success`, `auth_register_failure`, `auth_rate_limited`, `list_share`, `list_revoke`, `item_claim`, `item_purchase`, `item_revert`, `account_removal`, `session_revoked`, `session_reuse_detected`, `consent_updated` (US5, FR-021/FR-023), `invitation_matched` (US5, FR-011) |
 | `targetType` | `String?` | `gift_list` \| `gift_item` \| `user` \| `session` \| null |
 | `targetId` | `String?` | the referenced row id |
 | `outcome` | `String` | `success` \| `denied` \| `failure` — failed/denied attempts are recorded too (edge case "Audit under failure") |

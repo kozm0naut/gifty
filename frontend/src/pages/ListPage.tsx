@@ -6,6 +6,8 @@ import { GiftItemList } from '../components/GiftItemList';
 import { PermissionManager } from '../components/PermissionManager';
 import { RenameListForm } from '../components/RenameListForm';
 import { Modal } from '../components/Modal';
+import { ConsentPrompt } from '../components/ConsentPrompt';
+import { ConsentControl } from '../components/ConsentControl';
 import { useAuth } from '../context/AuthContext';
 import { getInitials } from '../utils/avatar';
 import { getNameColors } from '../utils/colors';
@@ -23,6 +25,11 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [showRecipients, setShowRecipients] = useState(false);
   const [modal, setModal] = useState<ListModal | null>(initialModal ?? null);
+  // US5: the caller's name-disclosure consent on this list. Owned here so the
+  // one-time prompt and the self-serve control always agree. `null` means
+  // "not a recipient" (the owner, or the consent read failed / 403) and the
+  // consent UI is hidden entirely.
+  const [consent, setConsent] = useState<api.ConsentState | null>(null);
   // Ref lives on the wrapper so the popover (a sibling of the stack inside the
   // wrapper) counts as "inside" — otherwise touching the popover to scroll it
   // would be read as an outside click and close it.
@@ -104,6 +111,34 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
       cancelled = true;
     };
   }, [listId, list, user?.id]);
+
+  // US5 (FR-021/FR-022): load the caller's consent state for this list once
+  // the list and viewer are known. Recipients get a `pending`/`revealed`/
+  // `declined` state; the owner (or a non-recipient) gets a 403 → `null`,
+  // which hides all consent UI.
+  useEffect(() => {
+    if (!listId || !list) return;
+    if (list.owner?.id === user?.id) {
+      setConsent(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .fetchConsent(listId)
+      .then((info) => {
+        if (!cancelled) setConsent(info.consent);
+      })
+      .catch(() => {
+        if (!cancelled) setConsent(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listId, list, user?.id]);
+
+  const handleConsentChange = (next: api.ConsentState) => {
+    setConsent(next);
+  };
 
   const handleItemAdded = (newItem: api.GiftItem) => {
     if (!list) return;
@@ -296,6 +331,11 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
           </div>
         )}
         </div>
+
+        {/* US5 (FR-023): self-serve name-disclosure control — recipients only. */}
+        {listId && consent !== null && (
+          <ConsentControl listId={listId} consent={consent} onChange={handleConsentChange} />
+        )}
       </section>
 
       <section className="items-section">
@@ -305,6 +345,11 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
           isOwner={isOwner}
         />
       </section>
+
+      {/* US5 (FR-022): one-time name-disclosure consent prompt — recipients only. */}
+      {listId && consent === 'pending' && (
+        <ConsentPrompt listId={listId} consent={consent} onChange={handleConsentChange} />
+      )}
 
       {modal === 'add-item' && listId && (
         <Modal title="Add Gift Item" subtitle={`to “${list.title}”`} onClose={closeModal}>

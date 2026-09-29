@@ -11,6 +11,7 @@ interface PermissionManagerProps {
 
 export function PermissionManager({ listId, onPermissionsUpdated, compact }: PermissionManagerProps) {
   const [permissions, setPermissions] = useState<api.SharePermission[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<api.PendingInvitation[]>([]);
   const [email, setEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
   const [isRevoking, setIsRevoking] = useState<string | null>(null);
@@ -29,9 +30,19 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
     }
   };
 
+  const loadPendingInvitations = async () => {
+    try {
+      const invitations = await api.fetchPendingInvitations(listId);
+      setPendingInvitations(invitations.filter((i) => i.status === 'pending'));
+    } catch {
+      /* pending invitations are non-critical */
+    }
+  };
+
   useEffect(() => {
     loadPermissions();
-  }, [listId]);
+    loadPendingInvitations();
+  }, [listId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +60,7 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
       setEmail('');
       setSuccess('Invitation sent successfully!');
       await loadPermissions();
+      await loadPendingInvitations();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to send invitation');
@@ -91,6 +103,20 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
           {isInviting ? 'Inviting...' : 'Invite'}
         </button>
       </form>
+
+      {pendingInvitations.length > 0 && (
+        <div className="pending-invitations">
+          <h4 className="muted recipient-heading">Pending invitations</h4>
+          <ul className="recipient-list">
+            {pendingInvitations.map((i) => (
+              <li key={i.id} className="recipient-row">
+                <span className="recipient-name">{i.inviteeEmail}</span>
+                <span className="faint">not registered yet</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div>
         <h4 className="muted recipient-heading">

@@ -8,6 +8,7 @@ import {
   apiFetchSharePermissions,
   apiRevokePermission,
   loginViaUI,
+  dismissConsentPromptIfPresent,
   uniqueEmail,
 } from './helpers';
 
@@ -36,6 +37,9 @@ test.describe('T025: Lifecycle edge cases (claim, cancel, purchase, reset)', () 
     await loginViaUI(page, recipientEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     await page.waitForSelector('text=Robot Vacuum');
+
+    // US5: acknowledge the one-time name-disclosure prompt before interacting.
+    await dismissConsentPromptIfPresent(page);
 
     const card = page.locator('.card', { hasText: 'Robot Vacuum' });
 

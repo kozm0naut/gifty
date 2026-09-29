@@ -63,11 +63,19 @@ export type DashboardList = GiftList & {
   items?: GiftItem[];
 };
 
+/** Name-disclosure consent state on a list (US5, FR-021–FR-024). */
+export type ConsentState = 'pending' | 'revealed' | 'declined';
+
 export type SharePermission = {
   id: string;
-  recipientUserId: string;
+  /** Null for a pending invitation (shared to an unregistered email). */
+  recipientUserId: string | null;
   recipientDisplayName: string;
   permission: 'shared';
+  /** Invite email — owner-only visibility (FR-010/FR-025). */
+  recipientEmail?: string | null;
+  /** The recipient's name-disclosure consent on this list (US5). */
+  consent?: ConsentState;
 };
 
 // Session termination (FR-027): the session was ended — either expired,
@@ -290,6 +298,55 @@ export async function fetchSharePermissions(listId: string): Promise<SharePermis
   return data.permissions ?? [];
 }
 
+/** A pending invitation: shared to an email with no account yet (US5). */
+export type PendingInvitation = {
+  id: string;
+  giftListId: string;
+  inviteeEmail: string;
+  status: 'pending' | 'matched' | 'discarded';
+  createdAt: string;
+};
+
+/**
+ * Owner-only: the list's pending invitations (shared to emails that have not
+ * registered yet). The owner sees the invite email as the source of truth.
+ */
+export async function fetchPendingInvitations(listId: string): Promise<PendingInvitation[]> {
+  const data = await apiFetch<{ pendingInvitations: PendingInvitation[] }>(
+    `/lists/${listId}/share-permissions`,
+  );
+  return data.pendingInvitations ?? [];
+}
+
 export async function revokePermission(listId: string, permissionId: string): Promise<void> {
   await apiFetch<unknown>(`/lists/${listId}/share/${permissionId}`, { method: 'DELETE' });
+}
+
+// ── US5: name-disclosure consent (FR-021–FR-024) ─────────────────────────────
+
+export type ConsentInfo = {
+  consent: ConsentState;
+  /** The caller's own display name (always visible to themselves). */
+  displayName: string;
+};
+
+/**
+ * Read the caller's consent state on a list. Recipient-only (the list owner
+ * gets a 403 — consent is not owner-queryable data).
+ */
+export async function fetchConsent(listId: string): Promise<ConsentInfo> {
+  const data = await apiFetch<ConsentInfo>(`/lists/${listId}/consent`);
+  return data;
+}
+
+/**
+ * Set the caller's consent to reveal or hide their display name on a list
+ * (FR-023). Idempotent and reversible at any time.
+ */
+export async function setConsent(listId: string, consent: ConsentState): Promise<{ consent: ConsentState }> {
+  const data = await apiFetch<{ consent: ConsentState }>(`/lists/${listId}/consent`, {
+    method: 'POST',
+    body: { consent },
+  });
+  return data;
 }

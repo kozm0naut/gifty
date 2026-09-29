@@ -7,6 +7,7 @@ import {
   apiShareList,
   apiClaimItem,
   loginViaUI,
+  dismissConsentPromptIfPresent,
   uniqueEmail,
 } from './helpers';
 
@@ -33,6 +34,9 @@ test.describe('T035: Share & claim UX success flows', () => {
     await loginViaUI(page, recipientEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     await page.waitForSelector('text=Espresso Machine');
+
+    // US5: acknowledge the one-time name-disclosure prompt before interacting.
+    await dismissConsentPromptIfPresent(page);
 
     const espressoCard = page.locator('.card', { hasText: 'Espresso Machine' });
     await espressoCard.locator('button', { hasText: 'Claim' }).click();

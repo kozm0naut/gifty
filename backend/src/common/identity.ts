@@ -15,6 +15,12 @@ export interface ItemIdentity {
 }
 
 /**
+ * Placeholder shown in place of a name that the viewer has no right to see
+ * (feature 003, FR-024 / SC-008: non-consented identities are masked).
+ */
+export const ANONYMOUS_DISPLAY_NAME = '????';
+
+/**
  * Resolves a batch of claimant user IDs to their display names in a single
  * query (FR-009: authorized recipients must be able to see who claimed an
  * item). The purchaser is always the claimant (only the claimant may purchase),
@@ -36,6 +42,63 @@ export async function resolveIdentityNames(items: IdentitySource[]): Promise<Map
   });
 
   return new Map(users.map((u) => [u.id, u.displayName]));
+}
+
+/**
+ * Feature 003 (US5, FR-021/FR-024): resolves claimant display names on a
+ * SPECIFIC list, honoring each claimant's name-disclosure consent on that
+ * list. A claimant whose consent is `revealed` resolves to their display
+ * name; every other state (`pending`, `declined`, no permission row) resolves
+ * to the `????` placeholder — the name is never leaked by accident.
+ *
+ * The result map only contains claimants present on the given items, so the
+ * caller can distinguish "resolved (name or placeholder)" from "not claimed".
+ */
+export async function resolveConsentedIdentityNames(
+  items: IdentitySource[],
+  listId: string,
+): Promise<Map<string, string>> {
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (item.claimantUserId) ids.add(item.claimantUserId);
+  }
+
+  if (ids.size === 0) {
+    return new Map();
+  }
+
+  const claimantIds = [...ids];
+
+  // Single query: every share-permission row on this list whose recipient is
+  // one of the claimants. The consent column lives on the permission row, so
+  // this is the authoritative source (FR-021: consent is per-list, per-user).
+  const permissions = await prisma.sharePermission.findMany({
+    where: {
+      giftListId: listId,
+      recipientUserId: { in: claimantIds },
+    },
+    select: { recipientUserId: true, nameDisclosureConsent: true },
+  });
+
+  const consentByUser = new Map(permissions.map((p) => [p.recipientUserId, p.nameDisclosureConsent]));
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: claimantIds } },
+    select: { id: true, displayName: true },
+  });
+
+  const namesByUser = new Map(users.map((u) => [u.id, u.displayName]));
+
+  const result = new Map<string, string>();
+  for (const userId of claimantIds) {
+    const consent = consentByUser.get(userId);
+    result.set(
+      userId,
+      consent === 'revealed' ? (namesByUser.get(userId) ?? ANONYMOUS_DISPLAY_NAME) : ANONYMOUS_DISPLAY_NAME,
+    );
+  }
+
+  return result;
 }
 
 /**

@@ -4,7 +4,7 @@ import { makeId } from '../common/id.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/middleware.js';
 import { authorizeItem, authorizeList } from '../auth/middleware.js';
 import { validateCreateGiftItem } from './gift-item.validation.js';
-import { resolveIdentityNames, decorateItemIdentity } from '../common/identity.js';
+import { resolveConsentedIdentityNames, decorateItemIdentity } from '../common/identity.js';
 
 export function createItemRouter() {
   const router = Router();
@@ -220,10 +220,10 @@ export function createItemRouter() {
       return res.status(200).json({ items: visibleItems });
     }
 
-    // Recipient view (FR-009): expose full state plus the resolved claimant
-    // display name so shared recipients can see who acted (the purchaser is
-    // always the claimant).
-    const names = await resolveIdentityNames(items);
+    // Recipient view (FR-009): expose full state plus the consent-aware
+    // claimant display name so shared recipients can see who acted, honoring
+    // each claimant's name-disclosure consent on THIS list (FR-021/FR-024).
+    const names = await resolveConsentedIdentityNames(items, listId);
     const visibleItems = decorateItemIdentity(items, names);
     return res.status(200).json({ items: visibleItems });
   });

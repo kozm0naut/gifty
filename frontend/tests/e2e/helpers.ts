@@ -223,6 +223,23 @@ export async function logoutViaUI(page: Page): Promise<void> {
 }
 
 /**
+ * Dismiss the US5 name-disclosure consent prompt (if shown) by revealing the
+ * recipient's name. Recipients see this one-time prompt on first open of a
+ * shared list (consent `pending`); pre-US5 recipient flows that then interact
+ * with the list (e.g. click "Claim") must acknowledge it first. No-op when no
+ * prompt is visible (e.g. owner views, or consent already acted on).
+ */
+export async function dismissConsentPromptIfPresent(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: /name disclosure/i });
+  if (await dialog.count()) {
+    // Scope to the dialog: the share-section's self-serve control also has a
+    // "Reveal my name" button, so an unscoped role query would be ambiguous.
+    await dialog.getByRole('button', { name: 'Reveal my name' }).click();
+    await dialog.waitFor({ state: 'detached', timeout: 10000 });
+  }
+}
+
+/**
  * Generates a unique email address for e2e test users.
  */
 export function uniqueEmail(prefix: string): string {

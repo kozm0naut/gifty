@@ -160,6 +160,46 @@ export function createAuthRouter() {
         throw err;
       }
 
+      // Feature 003 (US5, FR-011 / SC-009): convert any pending
+      // invitations addressed to this email into SharePermissions, in the
+      // SAME transaction as the account creation (transactional — a failure
+      // rolls back the user too). Consent starts at `pending` (FR-021): the
+      // new user must make the name-disclosure choice themselves.
+      const invitations = await prisma.pendingInvitation.findMany({
+        where: { inviteeEmail: normalizedEmail, status: 'pending' },
+      });
+      if (invitations.length > 0) {
+        await prisma.$transaction([
+          ...invitations.map((inv) =>
+            prisma.sharePermission.create({
+              data: {
+                id: makeId('share'),
+                giftListId: inv.giftListId,
+                ownerUserId: inv.ownerUserId,
+                recipientUserId: user.id,
+                permission: 'shared',
+                nameDisclosureConsent: 'pending',
+                recipientEmail: normalizedEmail,
+              },
+            }),
+          ),
+          ...invitations.map((inv) =>
+            prisma.pendingInvitation.update({
+              where: { id: inv.id },
+              data: { status: 'matched' },
+            }),
+          ),
+        ]);
+        void recordAuditEvent({
+          actorUserId: user.id,
+          action: 'invitation_matched',
+          outcome: 'success',
+          ip,
+          targetType: 'auth',
+          detail: { matchedCount: invitations.length },
+        });
+      }
+
       // Success: open a session and issue the HttpOnly cookie pair (T017).
       // The legacy `token` bridge field is formally retired in US4 — the
       // credential is now exclusively the `gifty_access` cookie.

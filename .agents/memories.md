@@ -2,7 +2,27 @@
 
 Gifty is a web application designed for tracking and sharing gift lists. Its primary goal is to allow users to curate lists of desired gifts and share them with friends or family. The core innovation is the "surprise" element: while shared recipients can see the claim and purchase status of items to avoid duplicates, the list owner cannot see who has claimed or purchased what, preserving the surprise for them.
  
-> **Status snapshot (2026-09-23):** Both features are **COMPLETE** (`001-gift-list-sharing` and `002-docker-deployment`); **no feature is in flight** and the working tree is clean on branch `docker-container`. The app is now deployed as a **single Docker container** (SPA + API + internal Postgres). **Start it with `npm run docker:up`** → http://localhost:8080 (health: `GET /healthz`).
+> **Status snapshot (2026-09-29):** `001-gift-list-sharing` and `002-docker-deployment` are **COMPLETE**; feature **`003-security-hardening` is IN PROGRESS** — Phases 1–6 (US1–US4) done on branch `security-hardening` (latest commit `bb2d6ef`); US5–US8 + polish (T030–T057) are NOT started and require explicit user go-ahead. The app is deployed as a **single Docker container** (SPA + API + internal Postgres). **Start it with `npm run docker:up`** → http://localhost:8080 (health: `GET /healthz`).
+
+## In-Progress Feature: `003-security-hardening` (Phases 1–6 done, 2026-09-29)
+
+Branch `security-hardening`; spec at `specs/003-security-hardening/` (57 tasks T001–T057). **T001–T029 `[x]` (done); T030–T057 `[ ]` (not started).**
+
+- **Phase 1 (foundational, T001–T009)** — session engine + audit module: `backend/src/auth/session.ts` (rotating refresh tokens, `previousRefreshHash` reuse/theft detection, 30-day cap, `resolveSessionForAccess`), `backend/src/audit/events.ts` (13 actions, fire-and-forget, `scrub()`), `POST /auth/refresh` + `POST /auth/logout`; `requireAuth` is session-aware (cookie `gifty_access` OR legacy Bearer; session-liveness check when a `sid` claim is present). Migration `20260928182006_security_hardening`: `UserSession`, `AuditEvent`, `PendingInvitation` models + `SharePermission.recipientEmail`/`nameDisclosureConsent`.
+- **Phase 3 (US1, T010–T018)** — rate limiting (`backend/src/auth/rate-limit.ts`: per-source + per-account budgets), password policy (`backend/src/auth/password-policy.ts`), cookie issuance (`gifty_access` signed JWT ~10 min; `gifty_refresh` opaque, path-scoped to `/auth/refresh`; both `HttpOnly`), AuthPage policy message.
+- **Phase 4 (US2, T019–T021)** — closed-by-default CORS, CSP (font origin via `CSP_FONT_ORIGIN`), HSTS prod-only, `x-powered-by` off.
+- **Phase 5 (US3, T022–T024)** — boot gate: `validateConfig()` (`backend/src/config/index.ts`, called from `server.ts` before listen) refuses missing/short/known-default `JWT_SECRET` and known-default `POSTGRES_PASSWORD` in production; `gifty_dev_password` default removed from `docker-compose.yml`/`docker-compose.codespace.yml`.
+- **Phase 6 (US4, T025–T029, commit `bb2d6ef`)** — **cookie-based session rework; Bearer bridge retired (frontend no longer sends `Authorization`; zero localStorage).** `frontend/src/services/api.ts` (single-flight 401 → `POST /auth/refresh` → retry once; `stale_refresh` → FR-027 security notice; `fetchAccount()`/`logoutSession()`), `frontend/src/context/AuthContext.tsx` (bootstrap via `GET /account`; `sessionNotice` security-vs-plain), `frontend/src/pages/AuthPage.tsx` (alert-error vs alert-warning). `vite.config.ts` proxies `/auth` (bypass: HTML → SPA) + `/account` for dev.
+
+**Verification (2026-09-29):** backend **133/133** + tsc clean; frontend unit **17/17** (`App.test.tsx` 3, `api.test.ts` 6, `AuthContext.test.tsx` 8) + tsc clean; Playwright e2e **12/12** (8 existing + 4 `session-revocation.spec.ts`).
+
+**NOT started (require explicit user go-ahead):** Phase 7 US5 consent + pending invitations (T030–T039) → Phase 8 US6 error hygiene (T040–T043) → Phase 9 US7 audit trail + account removal (T044–T050) → Phase 10 US8 supply-chain audit gate (T051–T053) → Phase 11 polish (T054–T057).
+
+**Gotchas (this feature):**
+- `cookie` package pinned `^2.0.1` — named exports only (`parseCookie`, `stringifySetCookie`); no default export.
+- `rotateSession` ordering: token-not-found → `stale_refresh` (checked FIRST), then `revoked`, then `expired`, then reuse-detection. A rotated-out token always yields `stale_refresh`; a current token on a revoked session yields `revoked`.
+- Never test the boot gate with `docker compose --env-file X up app` on the live stack — it REPLACES root `.env` (blank `POSTGRES_PASSWORD`) → crash-loop. Rely on `backend/tests/unit/boot-gate.test.ts`.
+- Backend tests need host `:5432`: production `docker-compose.yml` does NOT publish it; use `npm run dev:db` (dev override) for host-side tests.
 
 ## Codespaces 502 fix (2026-09-24, CONFIRMED)
 
@@ -90,17 +110,16 @@ The project is being built with a **Node.js/TypeScript backend** (using Express/
 ## Observations & Strategy
 
 - **Spec-Driven Development**: Feature `001-gift-list-sharing` was built from `specs/001-gift-list-sharing/` (`spec.md`, `plan.md`, `tasks.md`, `data-model.md`). Feature `002-docker-deployment` (`specs/002-docker-deployment/`) is **complete** — spec, plan, and tasks all done; see the `002-docker-deployment` section above.
-- **Spec Kit Workflow**: Each feature is tracked via its own `tasks.md`. We use `spec-kit` to ensure consistency between the specification, the plan, and the actual tasks. Both features are complete (2026-09-23); no feature is currently in flight.
+- **Spec Kit Workflow**: Each feature is tracked via its own `tasks.md`. We use `spec-kit` to ensure consistency between the specification, the plan, and the actual tasks. `001` + `002` complete (2026-09-23); `003-security-hardening` is in flight (T001–T029 done as of 2026-09-29).
 - **Privacy Enforcement (implemented)**: The visibility matrix is enforced at the backend. `backend/src/gift-lists/router.ts` and `backend/src/gift-items/router.ts` strip `claimantUserId`/`purchaserUserId` and force `state: 'available'` when the requester is the list owner, so the owner never sees claim/purchase state. Recipients see full state. The frontend (`GiftItemList.tsx`) additionally hides state/actions from the owner via the `isOwner` prop.
 - **Data Integrity (implemented)**: Atomic state transitions use conditional `updateMany` (e.g., `where: { id, state: 'available' }`) in `backend/src/gift-items/router.ts`, so concurrent claim/purchase/unclaim/unpurchase attempts resolve to exactly one winner. The dedicated concurrency/race test (T032 / SC-004) is implemented and passing in `backend/tests/sc-validation.test.ts`.
 - **Storage (implemented)**: All persistence is Prisma-backed, called inline from the routers (T043 complete). The legacy `backend/src/storage.ts` file was **deleted** during the dead-code cleanups (the `makeId` helper now lives in `backend/src/common/id.ts`). Persistence is covered by `backend/tests/persistence.test.ts`.
 
 ## Next Steps
 
-**No active feature workstream** — both features are complete:
-
 - `001-gift-list-sharing` — **COMPLETE** (all tasks `[x]`, 59 backend + 8 e2e tests passing).
-- `002-docker-deployment` — **COMPLETE** (all 25 tasks `[x]`, quickstart V1–V8 validated, committed on `docker-container` branch 2026-09-23).
+- `002-docker-deployment` — **COMPLETE** (all 25 tasks `[x]`, quickstart V1–V8 validated, merged to `main` 2026-09-23).
+- `003-security-hardening` — **IN PROGRESS** (branch `security-hardening`; T001–T029 `[x]` as of 2026-09-29, T030–T057 `[ ]`). **Next: Phase 7 = US5 (name-disclosure consent + pending invitations, T030–T039) — requires explicit user go-ahead before starting.** See the 003 section above for details.
 
 **Operational notes for anyone resuming in this repo**:
 - **Start the app (it is now a Docker container): `npm run docker:up`**  *(= `docker compose up --build -d`)* → app at **http://localhost:8080** (health: `GET /healthz`).

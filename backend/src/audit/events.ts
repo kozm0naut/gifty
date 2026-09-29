@@ -26,6 +26,8 @@ export const AUDIT_ACTIONS = [
   'account_removal',
   'session_revoked',
   'session_reuse_detected',
+  'consent_updated',
+  'invitation_matched',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

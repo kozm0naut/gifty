@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-27
 
-**Status**: Draft
+**Status**: In Progress
 
 **Input**: User description: "Let's make a spec for security hardening based on everything we've gone over, including what not to regress on"
 
