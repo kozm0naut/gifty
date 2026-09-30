@@ -13,6 +13,7 @@ The app ships as a single container (SPA + API) on one URL. From the repo root:
 - Stop (keeps data): `docker compose down` • Reset + wipe DB: `docker compose down -v`
 - Requires `JWT_SECRET` (≥ 32 chars, non-default in production) and `POSTGRES_PASSWORD` (non-default in production) in the root `.env` — the boot gate (`validateConfig()`, spec 003 US3) fails fast at boot if either is missing/weak.
 - Data is in the `gifty_postgres_data` volume; Postgres is internal-only (not published to the host).
+- **Always re-run the e2e suite AFTER every rebuild** (`npm run docker:up`): the Docker build bakes the frontend into the image, so tests run against a stale bundle unless rebuilt first. Order: `npm run docker:up` → `cd frontend; $env:BASE_URL='http://localhost:8080'; npx playwright test` (BASE_URL is mandatory — helpers default to the dev port :4000). Watch for the container-startup race: if the very first test fails with `SocketError: other side closed`, wait for `/healthz` then re-run.
 
 ### How to run the app (dev mode)
 For local iteration (hot reload, host-side tests) instead of Docker, from the repo root:

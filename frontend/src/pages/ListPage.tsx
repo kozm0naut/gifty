@@ -186,6 +186,20 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
 
   const isOwner = list.owner?.id === user?.id;
 
+  // US5 (FR-023): mirror the co-recipient view for the viewer's OWN entry in
+  // the sharing stack. When the viewer has not consented to name disclosure on
+  // this list, their own avatar/name render as the anonymous placeholder — the
+  // same thing every other non-revealing recipient sees. Purely cosmetic (the
+  // API already returns the viewer's own name); it keeps the sharing section
+  // honest about what is actually visible to others. Owner (consent === null)
+  // and already-revealed recipients are unaffected.
+  const maskSelf = consent !== null && consent !== 'revealed';
+  const selfMasked = (r: api.SharePermission) => maskSelf && r.recipientUserId === user?.id;
+  const displayName = (r: api.SharePermission) => (selfMasked(r) ? '????' : r.recipientDisplayName);
+  const displayColor = (r: api.SharePermission) =>
+    selfMasked(r) ? '#6b7280' : getNameColors(r.recipientDisplayName, true).primary;
+  const displayInitials = (r: api.SharePermission) => (selfMasked(r) ? '?' : getInitials(r.recipientDisplayName));
+
   return (
     <div
       className="list-page"
@@ -268,16 +282,16 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
             <span
               key={r.id}
               className="avatar"
-              style={{ background: getNameColors(r.recipientDisplayName, true).primary }}
-              title={r.recipientDisplayName}
+              style={{ background: displayColor(r) }}
+              title={displayName(r)}
             >
-              {getInitials(r.recipientDisplayName)}
+              {displayInitials(r)}
             </span>
           ))}
           {recipients.length > 8 && (
             <span
               className="avatar avatar-more"
-              title={recipients.slice(8).map((r) => r.recipientDisplayName).join('\n')}
+              title={recipients.slice(8).map((r) => displayName(r)).join('\n')}
             >
               +{recipients.length - 8}
             </span>
@@ -321,10 +335,10 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
                 <li key={r.id} className="avatar-popover-item">
                   <span
                     className="avatar-popover-dot"
-                    style={{ background: getNameColors(r.recipientDisplayName, true).primary }}
+                    style={{ background: displayColor(r) }}
                     aria-hidden="true"
                   />
-                  {r.recipientDisplayName}
+                  {displayName(r)}
                 </li>
               ))}
             </ul>

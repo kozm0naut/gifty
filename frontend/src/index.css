@@ -337,6 +337,29 @@ h1 {
   color: var(--color-text);
 }
 
+.btn-outline {
+  background: transparent;
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent-hover);
+  color: var(--color-accent-hover);
+}
+
+.consent-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .consent-actions {
+    flex-direction: column;
+  }
+}
+
 /* ---- Backlink ---- */
 .backlink {
   display: inline-flex;

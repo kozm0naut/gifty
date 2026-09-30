@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as api from '../services/api';
-import { Modal } from './Modal';
+import { ConsentModal } from './ConsentModal';
 
 interface ConsentPromptProps {
   listId: string;
@@ -16,58 +16,28 @@ interface ConsentPromptProps {
  *
  * - The prompt appears only when `consent === 'pending'`.
  * - "Reveal my name" → `revealed` (FR-023). "Keep me anonymous" → `declined`.
- * - Once the recipient acts, the prompt is never repeated (FR-022).
+ * - Dismissing without choosing (X / backdrop / Escape) is NOT a choice: it
+ *   leaves consent `pending` (no POST), dismisses the modal for this session,
+ *   and the prompt reappears the next time the list is opened (the local
+ *   dismissed state resets on remount).
  *
  * The consent state is owned by the parent (ListPage) so the prompt and the
  * self-serve control always agree.
  */
 export function ConsentPrompt({ listId, consent, onChange }: ConsentPromptProps) {
-  const [acting, setActing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Closing without choosing is not a consent decision — keep the state
+  // `pending` and simply hide the modal until the list is opened again.
+  const [dismissed, setDismissed] = useState(false);
 
-  if (consent !== 'pending') return null;
-
-  const handleAction = async (choice: api.ConsentState) => {
-    setActing(true);
-    setError(null);
-    try {
-      await api.setConsent(listId, choice);
-      onChange(choice);
-    } catch (err: any) {
-      setError(err.message || 'Failed to update your preference');
-    } finally {
-      setActing(false);
-    }
-  };
+  if (consent !== 'pending' || dismissed) return null;
 
   return (
-    <Modal
-      title="Name disclosure"
-      subtitle="Would you like to reveal your display name to the other people sharing this list?"
-      onClose={() => void handleAction('declined')}
-    >
-      {error && <div className="alert alert-error">{error}</div>}
-      <p className="muted">
-        If you choose to reveal your name, it will be visible to the owner and
-        other recipients of this list. You can change this choice at any time
-        from the list's Sharing section.
-      </p>
-      <div className="consent-actions">
-        <button
-          className="btn btn-primary"
-          onClick={() => void handleAction('revealed')}
-          disabled={acting}
-        >
-          {acting ? 'Updating…' : 'Reveal my name'}
-        </button>
-        <button
-          className="btn btn-outline"
-          onClick={() => void handleAction('declined')}
-          disabled={acting}
-        >
-          Keep me anonymous
-        </button>
-      </div>
-    </Modal>
+    <ConsentModal
+      listId={listId}
+      consent={consent}
+      onChange={onChange}
+      open
+      onClose={() => setDismissed(true)}
+    />
   );
 }

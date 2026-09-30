@@ -83,10 +83,16 @@ test.describe('consent-gated identity disclosure (US5, T033)', () => {
     await page.goto(`/list/${list.id}`);
     await expect(page.getByRole('dialog', { name: /name disclosure/i })).toHaveCount(0);
 
-    // Self-serve control (FR-023): the claimer hides their name again…
+    // Self-serve control (FR-023): the claimer reopens the consent prompt…
     const toggle = page.getByRole('button', { name: /hide my name/i });
     await expect(toggle).toBeVisible();
     await toggle.click();
+
+    // …and confirms "Keep me anonymous" in the modal to hide their name again.
+    const prompt2 = page.getByRole('dialog', { name: /name disclosure/i });
+    await expect(prompt2).toBeVisible();
+    await prompt2.getByRole('button', { name: /keep me anonymous/i }).click();
+    await expect(prompt2).toBeHidden();
 
     // …and the viewer sees the placeholder again.
     await switchUser(page, viewerEmail, E2E_PASSWORD);

@@ -145,6 +145,13 @@ Web app: `backend/src/`, `frontend/src/`, `backend/tests/`, `frontend/tests/e2e/
 
 **Checkpoint**: Identity disclosure is consent-gated end-to-end. Validate independently (T030–T033 green; SC-008/SC-009 behaviors observable; owner-privacy suite still passes).
 
+> **Gap for converge (US5 follow-up — not yet tasked):** The owner-facing share view still distinguishes registered vs unregistered recipients and leaks identity:
+> - When a list owner shares with an unregistered email, it is revealed that the email is unregistered (this information should not be shared with them — e.g. the "Pending invitations — not registered yet" section).
+> - When they share with a registered user, the display name is revealed right away (this should not be shared with them unless the user has consented to reveal display name).
+> - All shares should therefore appear identical to the list owner immediately after invitation: simply the email address the owner entered, with no other revealing info retrieved.
+>
+> (Related: FR-010 indistinguishable sharing — `POST /lists/:id/share` is already uniform, but the owner's listing/management view of shares is not; `GET /lists/:id` owner decoration and `frontend/src/components/PermissionManager.tsx` are the likely leak sites.)
+
 ## Phase 8: User Story 6 - Stop leaking reconnaissance signals (Priority: P2)
 
 **Goal**: Probing the app reveals nothing about account existence, framework, or internal errors — generic 5xx messages in production and no framework/server fingerprints.
