@@ -214,10 +214,32 @@ export function createListRouter() {
       return res.status(400).json({ message: 'Permission must be shared' });
     }
 
+    /**
+     * FR-010 / SC-009 (US6 scenario 1): the response to an EMAIL share must
+     * be indistinguishable from a share to a registered recipient, so it can
+     * never reveal whether the email is an account. Both branches therefore
+     * return the SAME uniform body — a neutral id (never the underlying
+     * record's `share_*`/`invite_*` id, which would be a fingerprint), a
+     * `null` recipientUserId (no identity), and the invite email. The
+     * underlying record still differs (SharePermission vs PendingInvitation);
+     * only the response is uniform.
+     */
+    const uniformShareResponse = (email: string) => ({
+      sharePermission: {
+        // Neutral id — never the underlying record's real id, which is
+        // prefixed `share_*` (registered) or `invite_*` (invitation) and
+        // would fingerprint registration.
+        id: makeId('sp'),
+        permission: 'shared',
+        recipientUserId: null,
+        recipientEmail: email,
+      },
+    });
+
     if (targetUserId) {
-      // Registered recipient (or explicit userId): SharePermission row.
-      // A re-invite after revocation is a FRESH permission with consent
-      // reset to `pending` (edge case: consent is per-invite).
+      // Registered recipient: materialize a SharePermission row (the
+      // recipient gets access immediately). A re-invite after revocation is a
+      // FRESH permission with consent reset to `pending` (consent is per-invite).
       const existing = await prisma.sharePermission.findUnique({
         where: {
           giftListId_recipientUserId: {
@@ -228,14 +250,12 @@ export function createListRouter() {
       });
 
       let sharePermission;
-      let created = false;
       if (existing) {
         sharePermission = await prisma.sharePermission.update({
           where: { id: existing.id },
           data: { permission: 'shared' },
         });
       } else {
-        created = true;
         sharePermission = await prisma.sharePermission.create({
           data: {
             id: makeId('share'),
@@ -249,16 +269,21 @@ export function createListRouter() {
         });
       }
 
-      return res
-        .status(created ? 201 : 200)
-        .json({ sharePermission: { ...sharePermission } });
+      // Explicit userId (owner-directed, not an email probe): return the full
+      // record, including the real id the client uses to revoke later. This
+      // path is not the email-registration enumeration vector.
+      if (!emailProvided) {
+        return res.status(201).json({ sharePermission: { ...sharePermission } });
+      }
+
+      // Email-directed: uniform, indistinguishable from the unregistered path.
+      return res.status(201).json(uniformShareResponse(normalizedEmail as string));
     }
 
-    // Unregistered email: PendingInvitation (normalized email). Always a
-    // 201 with the SAME body shape as the registered path — no 404, no
-    // different status — so an attacker cannot probe which emails exist
-    // (SC-009). The synthetic sharePermission mirrors the real one except
-    // for the not-yet-existing recipient identity.
+    // Unregistered email: hold as a PendingInvitation (normalized email).
+    // Always a 201 with the SAME uniform body as the registered-email path —
+    // no 404, no different status or shape — so a probe cannot tell which
+    // emails are accounts (SC-009).
     const invitation = await prisma.pendingInvitation.upsert({
       where: {
         giftListId_inviteeEmail: {
@@ -276,14 +301,7 @@ export function createListRouter() {
       },
     });
 
-    return res.status(201).json({
-      sharePermission: {
-        id: invitation.id,
-        permission: 'shared',
-        recipientUserId: null,
-        recipientEmail: invitation.inviteeEmail,
-      },
-    });
+    return res.status(201).json(uniformShareResponse(invitation.inviteeEmail));
   });
 
   router.delete('/:listId/share/:permissionId', authorizeList('manage'), async (req: AuthenticatedRequest, res) => {

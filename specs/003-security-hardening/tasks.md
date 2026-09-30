@@ -160,13 +160,13 @@ Web app: `backend/src/`, `frontend/src/`, `backend/tests/`, `frontend/tests/e2e/
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T040 [P] [US6] Error-hygiene contract tests in `backend/tests/contract/error-hygiene.test.ts`: induced internal failures return the single stable production body `{ "error": "An internal error occurred." }` with no stack/path/detail (FR-011); `X-Powered-By` absent on every response (FR-012); sign-in failures (unknown email vs wrong password vs rate-limited) are uniform in status+body (FR-020; conformance notes in contracts/api.md)
-- [ ] T041 [P] [US6] Enumeration tests for the share flow in `backend/tests/contract/share-enumeration.test.ts`: `POST /lists/:listId/share` to a registered vs unregistered email returns the same status and body (FR-010, US6 acceptance scenario 1)
+- [x] T040 [P] [US6] Error-hygiene contract tests in `backend/tests/contract/error-hygiene.test.ts`: induced internal failures return the single stable production body `{ "error": "An internal error occurred." }` with no stack/path/detail (FR-011); `X-Powered-By` absent on every response (FR-012); sign-in failures (unknown email vs wrong password vs rate-limited) are uniform in status+body (FR-020; conformance notes in contracts/api.md)
+- [x] T041 [P] [US6] Enumeration tests for the share flow in `backend/tests/contract/share-enumeration.test.ts`: `POST /lists/:listId/share` to a registered vs unregistered email returns the same status and body (FR-010, US6 acceptance scenario 1)
 
 ### Implementation for User Story 6
 
-- [ ] T042 [US6] Harden the error path in `backend/src/common/errors.ts` and `backend/src/app.ts`: in production, all unhandled/5xx responses collapse to the stable generic body with no stack trace, file path, query, or driver detail (FR-011); 4xx bodies keep their specific stable messages; verify Express error handlers and Prisma error mapping do not leak internals (US6 acceptance scenario 2)
-- [ ] T043 [US6] Verify and, where needed, remove framework/server fingerprints in `backend/src/app.ts`: confirm `X-Powered-By` disabled (from T021), no `Server` header identifying the framework, and no other response advertises implementation detail (FR-012, US6 acceptance scenario 3)
+- [x] T042 [US6] Harden the error path in `backend/src/common/errors.ts` and `backend/src/app.ts`: in production, all unhandled/5xx responses collapse to the stable generic body with no stack trace, file path, query, or driver detail (FR-011); 4xx bodies keep their specific stable messages; verify Express error handlers and Prisma error mapping do not leak internals (US6 acceptance scenario 2)
+- [x] T043 [US6] Verify and, where needed, remove framework/server fingerprints in `backend/src/app.ts`: confirm `X-Powered-By` disabled (from T021), no `Server` header identifying the framework, and no other response advertises implementation detail (FR-012, US6 acceptance scenario 3)
 
 **Checkpoint**: Recon signals stripped. Validate independently (T040–T041 green; US1's uniform-failure contract still holds).
 

@@ -98,6 +98,21 @@ export async function createApp(): Promise<Express> {
     res.status(200).json({ status: 'ok' });
   });
 
+  // Test-only probe (FR-011 / US6): registered ONLY when `GIFTY_ENABLE_TEST_PROBES`
+  // is set, so it never exists in a normal app. It throws a realistic
+  // server-side failure (a database-initialization error) so the production
+  // error handler's 5xx collapse can be exercised end-to-end — proving the
+  // raw message (which names a driver and carries a stack) is never echoed.
+  if (process.env.GIFTY_ENABLE_TEST_PROBES === '1') {
+    app.post('/__test/internal-error', (_req: Request, _res: Response) => {
+      const failure = new Error(
+        'Simulated internal failure: DB connection pool exhausted (ECONNREFUSED) at /srv/gifty/src/db.js:42'
+      );
+      failure.name = 'PrismaClientInitializationError';
+      throw failure;
+    });
+  }
+
   app.use('/auth', createAuthRouter());
   app.use('/lists', createListRouter());
   app.use('/', createItemRouter());
