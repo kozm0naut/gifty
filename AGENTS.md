@@ -28,7 +28,7 @@ For local iteration (hot reload, host-side tests) instead of Docker, from the re
 - **Project State & Memory**: `.agents/memories.md` tracks progress, current focus, and high-level implementation status.
 - **Specifications & Planning**:
     - `specs/002-docker-deployment/`: **COMPLETE FEATURE** — `spec.md`, `plan.md`, `tasks.md`, `quickstart.md`, and `contracts/deployment.md` for the single-command Docker deployment (all 25 tasks `[x]`).
-    - `specs/003-security-hardening/`: **IN-PROGRESS FEATURE** (branch `security-hardening`) — Phases 1–6 / US1–US4 done (rate limiting, password policy, secure defaults, boot gate, cookie-based sessions with refresh rotation + reuse detection; T001–T029 `[x]`); US5–US8 + polish (T030–T057) NOT started. See `.agents/memories.md` for the detailed 003 status.
+    - `specs/003-security-hardening/`: **IN-PROGRESS FEATURE** (branch `security-hardening`) — Phases 1–7 / US1–US5 done (rate limiting, password policy, secure defaults, boot gate, cookie-based sessions with refresh rotation + reuse detection, and name-disclosure consent with pending invitations; T001–T039 `[x]`; US5 shipped `dd52a53` + UI polish `9bf2dfb`). US6–US8 + polish (T040–T057) NOT started. A converge-ready gap note (owner-view enumeration leak) sits in `tasks.md` before Phase 8. See `.agents/memories.md` for the detailed 003 status.
     - `specs/001-gift-list-sharing/spec.md`: **COMPLETE FEATURE** — the source of truth for the core gift-list-sharing requirements and user stories (implemented).
     - `specs/001-gift-list-sharing/plan.md`: The architectural plan for the core feature.
     - `specs/001-gift-list-sharing/tasks.md`: The dependency-ordered task list for the core feature (all marked `[x]`).
