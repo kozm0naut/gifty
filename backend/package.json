@@ -25,6 +25,9 @@
     "prisma": "^6.7.0",
     "uuid": "^11.0.2"
   },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
+  },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.1",
     "@types/cors": "^2.8.5",

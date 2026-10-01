@@ -199,12 +199,12 @@ Web app: `backend/src/`, `frontend/src/`, `backend/tests/`, `frontend/tests/e2e/
 
 ### Tests for User Story 8 ⚠️
 
-- [ ] T051 [US8] Verify the release-verification audit script fails (non-zero) when a high/critical finding is present (e.g., against a deliberately vulnerable pinned dependency in a scratch install) and passes once it is fixed — proving the gate blocks rather than merely reports (FR-015, US8 scenario 2)
+- [x] T051 [US8] Verify the release-verification audit script fails (non-zero) when a high/critical finding is present (e.g., against a deliberately vulnerable pinned dependency in a scratch install) and passes once it is fixed — proving the gate blocks rather than merely reports (FR-015, US8 scenario 2)
 
 ### Implementation for User Story 8
 
-- [ ] T052 [P] [US8] Run `npm audit fix --omit=dev` (or update the offending dependencies) in `backend/` and `frontend/` until the production runtime has zero high/critical-severity findings (FR-015, SC-006, research D10)
-- [ ] T053 [P] [US8] Add a release-verification audit script to the root `package.json` (`"audit:prod"`: runs `npm audit --omit=dev --audit-level=high` in `backend/` and then in `frontend/`) that exits non-zero on any high/critical finding so a release is blocked unless the finding is fixed or explicitly accepted (FR-015, US8 scenario 2)
+- [x] T052 [P] [US8] Run `npm audit fix --omit=dev` (or update the offending dependencies) in `backend/` and `frontend/` until the production runtime has zero high/critical-severity findings (FR-015, SC-006, research D10)
+- [x] T053 [P] [US8] Add a release-verification audit script to the root `package.json` (`"audit:prod"`: runs `npm audit --omit=dev --audit-level=high` in `backend/` and then in `frontend/`) that exits non-zero on any high/critical finding so a release is blocked unless the finding is fixed or explicitly accepted (FR-015, US8 scenario 2)
 
 **Checkpoint**: Supply chain verified clean. Validate independently (root `npm run audit` passes in both apps).
 
