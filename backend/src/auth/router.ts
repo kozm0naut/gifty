@@ -44,11 +44,11 @@ function serializeCookie(
   return stringifySetCookie({ name, value, ...attrs });
 }
 
-function clearAccessCookie(): string {
+export function clearAccessCookie(): string {
   return serializeCookie(loadConfig().cookies.accessName, '', '/', 0);
 }
 
-function clearRefreshCookie(): string {
+export function clearRefreshCookie(): string {
   return serializeCookie(loadConfig().cookies.refreshName, '', '/auth/refresh', 0);
 }
 

@@ -27,6 +27,8 @@ interface AuthContextType {
   sessionNotice: SessionNotice | null;
   login: (user: User) => void;
   logout: () => Promise<void>;
+  /** US7: the account was removed server-side — drop local auth state. */
+  removeAccount: () => void;
   clearSessionNotice: () => void;
 }
 
@@ -82,6 +84,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionNotice(null);
   }, []);
 
+  // Account removal (US7): the server has already deleted the user and cleared
+  // both cookies; here we only drop the local auth state so the UI lands on the
+  // sign-in page. No further server call is needed (the account is gone).
+  const removeAccount = useCallback(() => {
+    setUser(null);
+    setSessionNotice(null);
+  }, []);
+
   const clearSessionNotice = useCallback(() => setSessionNotice(null), []);
 
   // If the API reports the session is no longer valid (401 that survived a
@@ -112,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionNotice,
         login,
         logout,
+        removeAccount,
         clearSessionNotice,
       }}
     >

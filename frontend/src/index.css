@@ -167,6 +167,22 @@ textarea {
 .app-nav {
   display: flex;
   align-items: center;
+  gap: 0.75rem;
+}
+
+.nav-link {
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-decoration: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.nav-link:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-user-cluster {
@@ -1451,4 +1467,63 @@ h1 {
 
 .deleted-title {
   margin-bottom: 0.5rem;
+}
+
+/* ---- Account (US7) ---- */
+.account-page {
+  max-width: 720px;
+}
+
+.account-profile {
+  margin-bottom: 1.5rem;
+}
+
+.account-fields {
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.account-field {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.account-field dt {
+  min-width: 7rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.account-field dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.account-danger {
+  border-left: 3px solid var(--color-danger);
+}
+
+.account-danger-desc {
+  margin: 0 0 1rem;
+}
+
+.account-confirm p {
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+
+.account-confirm-list {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+  line-height: 1.6;
+}
+
+.account-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
 }

@@ -3,10 +3,12 @@ import cors, { CorsOptions } from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createAuthRouter } from './auth/router.js';
+import { createAuthRouter, clearAccessCookie, clearRefreshCookie } from './auth/router.js';
 import { createListRouter } from './gift-lists/router.js';
 import { createItemRouter } from './gift-items/router.js';
 import { requireAuth, type AuthenticatedRequest } from './auth/middleware.js';
+import { clientIp } from './auth/rate-limit.js';
+import { removeAccount } from './account/removal.js';
 import { loadConfig, validateConfig } from './config/index.js';
 import { errorHandler } from './common/errors.js';
 
@@ -134,6 +136,21 @@ export async function createApp(): Promise<Express> {
       });
     },
   );
+
+  // DELETE /account — irreversible account removal (feature 003, US7, FR-014 /
+  // FR-028). Requires a live session (401 otherwise). On success: 204 and both
+  // session cookies are cleared; the user row, owned lists, recipient-side
+  // permissions, sessions, and pending invitations are removed atomically, and
+  // the user's claims on others' items are reverted (T048, research D12).
+  app.delete('/account', requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      await removeAccount(req.user!.id, clientIp(req));
+      res.set('Set-Cookie', [clearAccessCookie(), clearRefreshCookie()]);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
 
   // Production static serving (research D2/D12): when running with
   // NODE_ENV=production and a frontend build is present, serve the SPA

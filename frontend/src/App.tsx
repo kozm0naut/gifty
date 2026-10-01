@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { AuthPage } from './pages/AuthPage';
 import { Dashboard } from './pages/DashboardPage';
 import { ListPage } from './pages/ListPage';
+import { AccountPage } from './pages/AccountPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BrandMark } from './components/BrandMark';
 import { getInitials } from './utils/avatar';
@@ -40,6 +41,9 @@ function AppContent() {
 
         {isAuthenticated && (
           <nav className="app-nav">
+            <Link to="/me" className="nav-link" title="Account settings">
+              Account
+            </Link>
             <div className="nav-user-cluster">
               <span
                 className="nav-avatar"
@@ -65,6 +69,11 @@ function AppContent() {
         <Routes>
           <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          {/* The account area lives at /me — /account is taken by the API
+              session-bootstrap endpoint (GET /account), and Express serves
+              that route before the SPA fallback, so a /account SPA route would
+              be unreachable by hard navigation. */}
+          <Route path="/me" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
           <Route path="/list/:listId" element={<ProtectedRoute><ListPage /></ProtectedRoute>} />
           <Route path="/list/:listId/add-item" element={<ProtectedRoute><ListPage initialModal="add-item" /></ProtectedRoute>} />
           <Route path="/list/:listId/sharing" element={<ProtectedRoute><ListPage initialModal="sharing" /></ProtectedRoute>} />

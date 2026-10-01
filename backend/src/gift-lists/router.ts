@@ -9,6 +9,7 @@ import {
   resolveConsentedIdentityNames,
 } from '../common/identity.js';
 import { recordAuditEvent } from '../audit/events.js';
+import { clientIp } from '../auth/rate-limit.js';
 
 /**
  * Attach the owner identity for a list, honoring feature 003 (US5, FR-025 /
@@ -191,6 +192,15 @@ export function createListRouter() {
     }
 
     if (!targetUserId && !normalizedEmail) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'list_share',
+        targetType: 'giftList',
+        targetId: listId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'recipient_identifier_required' },
+      });
       return res.status(400).json({ message: 'Recipient identifier (userId or email) is required' });
     }
 
@@ -207,10 +217,28 @@ export function createListRouter() {
     }
 
     if (targetUserId === req.user!.id) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'list_share',
+        targetType: 'giftList',
+        targetId: listId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'self_share' },
+      });
       return res.status(400).json({ message: 'A list owner cannot share with themselves' });
     }
 
     if (permission !== 'shared') {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'list_share',
+        targetType: 'giftList',
+        targetId: listId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'invalid_permission' },
+      });
       return res.status(400).json({ message: 'Permission must be shared' });
     }
 
@@ -269,6 +297,15 @@ export function createListRouter() {
         });
       }
 
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'list_share',
+        targetType: 'giftList',
+        targetId: listId,
+        outcome: 'success',
+        ip: clientIp(req),
+        detail: { recipientUserId: targetUserId },
+      });
       // Explicit userId (owner-directed, not an email probe): return the full
       // record, including the real id the client uses to revoke later. This
       // path is not the email-registration enumeration vector.
@@ -301,6 +338,15 @@ export function createListRouter() {
       },
     });
 
+    recordAuditEvent({
+      actorUserId: req.user!.id,
+      action: 'list_share',
+      targetType: 'giftList',
+      targetId: listId,
+      outcome: 'success',
+      ip: clientIp(req),
+      detail: { inviteeEmail: invitation.inviteeEmail },
+    });
     return res.status(201).json(uniformShareResponse(invitation.inviteeEmail));
   });
 
@@ -317,6 +363,15 @@ export function createListRouter() {
     });
 
     if (!permission || permission.giftListId !== listId) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'list_revoke',
+        targetType: 'giftList',
+        targetId: listId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'permission_not_found' },
+      });
       return res.status(404).json({ message: 'Permission not found for this list' });
     }
 
@@ -324,6 +379,15 @@ export function createListRouter() {
       where: { id: permissionId },
     });
 
+    recordAuditEvent({
+      actorUserId: req.user!.id,
+      action: 'list_revoke',
+      targetType: 'giftList',
+      targetId: listId,
+      outcome: 'success',
+      ip: clientIp(req),
+      detail: { permissionId },
+    });
     res.status(204).send();
   });
 

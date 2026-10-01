@@ -229,6 +229,23 @@ export async function logoutSession(): Promise<void> {
   }
 }
 
+/**
+ * Remove the account (feature 003, US7, FR-014 / FR-028). Irreversible: the
+ * server atomically deletes the user, their owned lists, recipient-side
+ * permissions, sessions, and pending invitations, and reverts their claims on
+ * others' items. Both session cookies are cleared. 204 on success; 401 if the
+ * session is already gone.
+ */
+export async function deleteAccount(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/account`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (response.status !== 204 && response.status !== 401) {
+    throw new Error('Failed to remove account');
+  }
+}
+
 export async function fetchLists(): Promise<DashboardList[]> {
   const data = await apiFetch<{ lists: DashboardList[] }>('/lists');
   return data.lists ?? [];
