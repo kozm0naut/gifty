@@ -10,3 +10,4 @@ frontend/dist/
 coverage/
 test-results/
 .vscode/
+.github/copilot-instructions.md
