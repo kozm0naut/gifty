@@ -2,11 +2,11 @@
 
 Gifty is a web application designed for tracking and sharing gift lists. Its primary goal is to allow users to curate lists of desired gifts and share them with friends or family. The core innovation is the "surprise" element: while shared recipients can see the claim and purchase status of items to avoid duplicates, the list owner cannot see who has claimed or purchased what, preserving the surprise for them.
  
-> **Status snapshot (2026-10-01):** `001-gift-list-sharing` and `002-docker-deployment` are **COMPLETE**; feature **`003-security-hardening` is IN PROGRESS** — Phases 1–10 (US1–US8) done on branch `security-hardening`; **only Phase 11 polish (T054–T057) remains.** The app is deployed as a **single Docker container** (SPA + API + internal Postgres). **Start it with `npm run docker:up`** → http://localhost:8080 (health: `GET /healthz`).
+> **Status snapshot (2026-10-02):** `001-gift-list-sharing`, `002-docker-deployment`, and `003-security-hardening` are all **COMPLETE** (003: T001–T066 `[x]`, two converge passes clean, PR #3 ready for review). The app is deployed as a **single Docker container** (SPA + API + internal Postgres). **Start it with `npm run docker:up`** → http://localhost:8080 (health: `GET /healthz`).
 
-## In-Progress Feature: `003-security-hardening` (Phases 1–10 done, 2026-10-01)
+## Completed Feature: `003-security-hardening` (COMPLETE 2026-10-02, PR #3)
 
-Branch `security-hardening`; spec at `specs/003-security-hardening/` (57 tasks T001–T057). **T001–T053 `[x]` (done); T054–T057 `[ ]` (Phase 11 polish, not started).**
+Branch `security-hardening`; spec at `specs/003-security-hardening/` (66 tasks T001–T066, all `[x]`). **Verification: backend 176/176 + frontend unit 17/17 + e2e 19/19 (against `npm run docker:up` :8080) + tsc clean.**
 
 - **Phase 1 (foundational, T001–T009)** — session engine + audit module: `backend/src/auth/session.ts` (rotating refresh tokens, `previousRefreshHash` reuse/theft detection, 30-day cap, `resolveSessionForAccess`), `backend/src/audit/events.ts` (13 actions, fire-and-forget, `scrub()`), `POST /auth/refresh` + `POST /auth/logout`; `requireAuth` is session-aware (cookie `gifty_access` OR legacy Bearer; session-liveness check when a `sid` claim is present). Migration `20260928182006_security_hardening`: `UserSession`, `AuditEvent`, `PendingInvitation` models + `SharePermission.recipientEmail`/`nameDisclosureConsent`.
 - **Phase 3 (US1, T010–T018)** — rate limiting (`backend/src/auth/rate-limit.ts`: per-source + per-account budgets), password policy (`backend/src/auth/password-policy.ts`), cookie issuance (`gifty_access` signed JWT ~10 min; `gifty_refresh` opaque, path-scoped to `/auth/refresh`; both `HttpOnly`), AuthPage policy message.
@@ -22,15 +22,15 @@ Branch `security-hardening`; spec at `specs/003-security-hardening/` (57 tasks T
 
 - **Audit-log review decision (2026-09-30):** A `Deleted_User_<id>` placeholder for the actor on removal was **explicitly rejected** — `AuditEvent.actorUserId` is a real FK to `User.id` (`onDelete: SetNull`), so a non-user placeholder can't satisfy it and dropping the FK was not worth it. **Keep null + FK.** The (future) **frontend audit-log review UI** will handle null actors and identify deleted users *after the fact* by cross-referencing the authoritative `account_removal` rows (`targetId` = removed user id) and joining `targetId`/`detail.recipientUserId` against the live user table. **`scripts/audit-query.sql` + `scripts/audit-cols.sql` + `scripts/show-audit.ps1` are KEPT (not temp)** until that audit-review frontend is built — run via `Get-Content scripts\audit-query.sql | docker compose exec -T postgres psql -U gifty -d gifty -X -f -`.
 
-**Verification (2026-09-30):** backend **169/169** (24 files) + tsc clean; frontend unit **17/17** + tsc clean; Playwright e2e **18/18** against `npm run docker:up` (http://localhost:8080) incl. new `account-removal.spec.ts`. One-approval validation: `npm run verify` (rebuild → `/healthz` wait → `test:e2e:container`) + `npm run e2e` (no rebuild). Note `npm audit` reports 7 vulns in `frontend/` (5 moderate, 1 high, 1 critical) — that is the US8 (T052) work item, not yet started.
+**Verification (final, 2026-10-02):** backend **176/176** (24 files) + tsc clean; frontend unit **17/17** + tsc clean; Playwright e2e **19/19** against `npm run docker:up` (http://localhost:8080). One-approval validation: `npm run verify` (rebuild → `/healthz` wait → `test:e2e:container`) + `npm run e2e` (no rebuild). Supply-chain gate green: `npm run audit` exits 0 (US8, T051–T053 done — see Phase 10 entry above).
 
-**NOT started (require explicit user go-ahead):** Phase 10 US8 supply-chain audit gate (T051–T053) → Phase 11 polish (T054–T057).
+**Phases 11–14 (convergence, 2026-10-01 → 2026-10-02):** Phase 11 polish (T054–T057) + Phase 12 uniform owner share view / enumeration fix (`GET /:id/share-permissions` now returns one uniform `permissions` array — registered + pending merged, invite-ordered, no `recipientUserId`/`consent`) + test isolation (T058–T062). **Phase 13 convergence (T063–T065):** FR-029 "Shared with" ordering rule pinned in `spec.md` + `contracts/api.md` (revealed-alphabetical → self-if-masked → remaining in invite order; position must not leak registration status); FR-013 append-only audit tests (no `updatedAt`, no mutation path, no route handler); `plan.md` note that `scripts/ensure-test-db.mjs` is dev/test-only. **Phase 14 convergence (T066):** 3 ordering regression tests (self-contained fixtures in `gifty_test`). `scripts/demo-phase12.mjs` removed. Second converge pass: **converged, 0 findings**.
 
 **Gotchas (this feature):**
 - `cookie` package pinned `^2.0.1` — named exports only (`parseCookie`, `stringifySetCookie`); no default export.
 - `rotateSession` ordering: token-not-found → `stale_refresh` (checked FIRST), then `revoked`, then `expired`, then reuse-detection. A rotated-out token always yields `stale_refresh`; a current token on a revoked session yields `revoked`.
 - Never test the boot gate with `docker compose --env-file X up app` on the live stack — it REPLACES root `.env` (blank `POSTGRES_PASSWORD`) → crash-loop. Rely on `backend/tests/unit/boot-gate.test.ts`.
-- Backend tests need host `:5432`: production `docker-compose.yml` does NOT publish it; use `npm run dev:db` (dev override) for host-side tests.
+- Backend tests self-provision: `npm test` runs the `pretest` hook (`scripts/ensure-test-db.mjs`) which brings up the dev-overlay Postgres, ensures the isolated `gifty_test` DB, and pushes the Prisma schema — never touches the live app DB. `scripts/ensure-test-db.mjs` is dev/test-only, not in the production image (see `plan.md` test-infra note).
 
 ## Codespaces 502 fix (2026-09-24, CONFIRMED)
 
