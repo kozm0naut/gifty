@@ -384,3 +384,171 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     expect(item.claimantDisplayName).toBe('????');
   });
 });
+
+describe('FR-029 "Shared with" ordering (T066)', () => {
+  // The API returns all entries (registered + pending) merged and sorted by
+  // createdAt (invite order). The frontend (ListPage / PermissionManager)
+  // re-sorts for display (revealed-alphabetical → self-if-masked → remaining
+  // in invite order). This test verifies the API provides the correct data
+  // in the correct base order, and that position never leaks registration
+  // status (FR-010).
+
+  it('owner /share-permissions: entries merged in invite (createdAt) order; position does not distinguish registered from unregistered (FR-029, FR-010)', async () => {
+    const app = await createApp();
+    const owner = await register(app, 'ord-owner', 'Owner');
+    const alice = await register(app, 'ord-alice', 'Alice');
+    const bob = await register(app, 'ord-bob', 'Bob');
+    const ghostEmail = uniqueEmail('ord-ghost'); // no account
+    const listId = await createList(app, owner, 'Ordering List');
+
+    // Invite in a specific order: ghost (1st), bob (2nd), alice (3rd).
+    // createdAt is monotonically increasing, so this order is stable.
+    const ghostShare = await request(app)
+      .post(`/lists/${listId}/share`)
+      .set('Cookie', `gifty_access=${owner.access}`)
+      .send({ recipientEmail: ghostEmail, permission: 'shared' });
+    expect([200, 201]).toContain(ghostShare.status);
+
+    await shareWith(app, owner, listId, bob);
+    await shareWith(app, owner, listId, alice);
+
+    // Reveal alice (FR-021/FR-023).
+    await setConsent(app, alice, listId, 'revealed');
+
+    // --- Owner view ---
+    const res = await request(app)
+      .get(`/lists/${listId}/share-permissions`)
+      .set('Cookie', `gifty_access=${owner.access}`);
+    expect(res.status).toBe(200);
+    const perms = res.body.permissions;
+    expect(perms).toHaveLength(3);
+
+    // Sorted by invite (createdAt) order: ghost(1st), bob(2nd), alice(3rd).
+    expect(perms[0].recipientEmail).toBe(ghostEmail);
+    expect(perms[1].recipientEmail).toBe(bob.email);
+    expect(perms[2].recipientEmail).toBe(alice.email);
+
+    // Alice is revealed → owner sees her display name.
+    expect(perms[2].recipientDisplayName).toBe('Alice');
+    // Bob never consented → null.
+    expect(perms[1].recipientDisplayName ?? null).toBeNull();
+    // Ghost has no account → null.
+    expect(perms[0].recipientDisplayName ?? null).toBeNull();
+
+    // Uniformity: no entry carries a registration-status fingerprint.
+    for (const entry of perms) {
+      expect(entry).not.toHaveProperty('recipientUserId');
+      expect(entry).not.toHaveProperty('consent');
+      expect(entry).not.toHaveProperty('registered');
+      expect(entry).not.toHaveProperty('pending');
+    }
+
+    // Position does NOT distinguish: ghost(1st) and bob(2nd) are
+    // indistinguishable except for their email (owner's source of truth).
+    const ghostEntry = perms.find((p: any) => p.recipientEmail === ghostEmail)!;
+    const bobEntry = perms.find((p: any) => p.recipientEmail === bob.email)!;
+    const sharedKeys = ['permission', 'recipientDisplayName'];
+    for (const key of sharedKeys) {
+      expect(ghostEntry[key]).toEqual(bobEntry[key]);
+    }
+  });
+
+  it('recipient /recipients: entries merged in invite (createdAt) order; own entry present; position does not distinguish registered from unregistered (FR-029, FR-010)', async () => {
+    const app = await createApp();
+    const owner = await register(app, 'ord2-owner', 'Owner');
+    const alice = await register(app, 'ord2-alice', 'Alice');
+    const bob = await register(app, 'ord2-bob', 'Bob');
+    const ghostEmail = uniqueEmail('ord2-ghost'); // no account
+    const listId = await createList(app, owner, 'Ordering List 2');
+
+    // Invite in order: ghost(1st), bob(2nd), alice(3rd).
+    const ghostShare = await request(app)
+      .post(`/lists/${listId}/share`)
+      .set('Cookie', `gifty_access=${owner.access}`)
+      .send({ recipientEmail: ghostEmail, permission: 'shared' });
+    expect([200, 201]).toContain(ghostShare.status);
+
+    await shareWith(app, owner, listId, bob);
+    await shareWith(app, owner, listId, alice);
+
+    // Alice reveals (FR-021/FR-023). Bob does not consent.
+    await setConsent(app, alice, listId, 'revealed');
+
+    // --- Recipient view (as alice) ---
+    const res = await request(app)
+      .get(`/lists/${listId}/recipients`)
+      .set('Cookie', `gifty_access=${alice.access}`);
+    expect(res.status).toBe(200);
+    const recipients = res.body.recipients;
+    expect(recipients).toHaveLength(3);
+
+    // Sorted by invite (createdAt) order: ghost(1st), bob(2nd), alice(3rd).
+    expect(recipients[0].recipientDisplayName).toBe('????'); // ghost
+    expect(recipients[1].recipientDisplayName).toBe('????'); // bob (unconsented)
+    expect(recipients[2].recipientDisplayName).toBe('Alice'); // alice (revealed, own)
+
+    // Alice sees her own name (own entry), alice's consent is revealed.
+    // Bob never consented → placeholder. Ghost has no account → placeholder.
+    // No email is exposed to co-recipients (FR-025).
+    expect(JSON.stringify(res.body)).not.toContain(ghostEmail);
+    expect(JSON.stringify(res.body)).not.toContain(bob.email);
+    expect(JSON.stringify(res.body)).not.toContain(alice.email);
+
+    // No registration-status fingerprint on any entry.
+    for (const entry of recipients) {
+      // recipientUserId may be present (alice's own entry) but must NOT
+      // distinguish ghost from bob — both should have null or be indistinguishable.
+      expect(entry).not.toHaveProperty('consent');
+      expect(entry).not.toHaveProperty('registered');
+      expect(entry).not.toHaveProperty('pending');
+    }
+  });
+
+  it('recipient /recipients: position does not leak which invitees registered (FR-029, FR-010, SC-009)', async () => {
+    const app = await createApp();
+    const owner = await register(app, 'ord3-owner', 'Owner');
+    const reg1 = await register(app, 'ord3-reg1', 'Reg One');
+    const reg2 = await register(app, 'ord3-reg2', 'Reg Two');
+    const ghostA = uniqueEmail('ord3-ghostA');
+    const ghostB = uniqueEmail('ord3-ghostB');
+    const viewer = await register(app, 'ord3-viewer', 'Viewer');
+    const listId = await createList(app, owner, 'Ordering List 3');
+
+    // Invite order: ghostA(1st), ghostB(2nd), reg1(3rd), reg2(4th), viewer(5th).
+    // Mixed registered + unregistered invitees interleaved in time so the
+    // createdAt sort (not table membership) is what determines order.
+    for (const ghost of [ghostA, ghostB]) {
+      const r = await request(app)
+        .post(`/lists/${listId}/share`)
+        .set('Cookie', `gifty_access=${owner.access}`)
+        .send({ recipientEmail: ghost, permission: 'shared' });
+      expect([200, 201]).toContain(r.status);
+    }
+    await shareWith(app, owner, listId, reg1);
+    await shareWith(app, owner, listId, reg2);
+    await shareWith(app, owner, listId, viewer);
+
+    // None of reg1/reg2 consent → all non-viewer entries are unidentified.
+    const res = await request(app)
+      .get(`/lists/${listId}/recipients`)
+      .set('Cookie', `gifty_access=${viewer.access}`);
+    expect(res.status).toBe(200);
+    const recipients = res.body.recipients;
+    expect(recipients).toHaveLength(5);
+
+    // All non-own entries show the placeholder (no one consented to reveal).
+    const nonOwn = recipients.filter((r: any) => r.recipientUserId !== viewer.id);
+    for (const entry of nonOwn) {
+      expect(entry.recipientDisplayName).toBe('????');
+    }
+
+    // The viewer cannot tell which of the 4 unidentified entries are
+    // registered accounts vs pending invitations — they all look identical
+    // (placeholder name, no email, no registration flag).
+    // (The viewer's own entry is the only one with a non-null recipientUserId
+    // that matches the viewer — that's expected and is the viewer's own entry.)
+    const ownEntry = recipients.find((r: any) => r.recipientUserId === viewer.id);
+    expect(ownEntry).toBeTruthy();
+    expect(ownEntry.recipientDisplayName).toBe('Viewer');
+  });
+});

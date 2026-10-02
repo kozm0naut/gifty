@@ -1,4 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+// Walk a directory tree, yielding every JS/TS source file (used by the
+// append-only audit assertions in the FR-013 block below).
+function* walk(dir: string): Generator<string> {
+  for (const entry of readdirSync(dir)) {
+    const p = join(dir, entry);
+    const s = statSync(p);
+    if (s.isDirectory()) yield* walk(p);
+    else if (/\.[cm]?tsx?$/.test(entry)) yield p;
+  }
+}
 
 // Unit tests for the audit capture module (T009). Prisma is mocked so no
 // live database is required.
@@ -122,5 +138,36 @@ describe('recordAuditEvent (T009)', () => {
     });
     const { data } = (prisma.auditEvent.create as any).mock.calls[0][0];
     expect(data.actorUserId).toBeNull();
+  });
+});
+
+describe('FR-013 append-only audit trail (T064)', () => {
+  it('AuditEvent schema is append-only: createdAt present, no updatedAt', () => {
+    const schema = readFileSync(
+      join(here, '../../prisma/schema.prisma'),
+      'utf8',
+    );
+    // Isolate the AuditEvent model block (from its header to the closing
+    // brace at column 0).
+    const model = schema
+      .split('model AuditEvent {')[1]
+      .split('\n}\n')[0];
+
+    expect(model).toMatch(/createdAt\s+DateTime\s+@default\(now\(\)\)/);
+    expect(model).not.toMatch(/updatedAt/);
+  });
+
+  it('no backend source mutates or deletes audit rows', () => {
+    const srcDir = join(here, '../../src');
+    for (const file of walk(srcDir)) {
+      const code = readFileSync(file, 'utf8');
+      // The audit capture module itself must never call a mutating API.
+      expect(code, file).not.toMatch(/prisma\.auditEvent\s*\.\s*(update|updateMany|delete|deleteMany|upsert)\b/);
+    }
+  });
+
+  it('no route handler is registered against the audit log', () => {
+    const appCode = readFileSync(join(here, '../../src/app.ts'), 'utf8');
+    expect(appCode).not.toMatch(/audit/i);
   });
 });

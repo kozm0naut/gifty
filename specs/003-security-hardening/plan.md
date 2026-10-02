@@ -120,6 +120,8 @@ specs/003-security-hardening/
 └── package.json                   # EXTEND: + audit script (npm audit --omit=dev) for release verification (FR-015)
 ```
 
+**Test infrastructure note (2026-10-02)**: `scripts/ensure-test-db.mjs` (repo root) is a **dev/test-only** helper — the `pretest` self-provisioning hook in `backend/package.json` that brings up the dev-overlay Postgres, ensures the isolated `gifty_test` database, and pushes the Prisma schema before `npm test` runs. It is NOT part of the production runtime: the Docker image and `entrypoint.sh` never invoke it (production runs `prisma migrate deploy` against the live DB). The one-off fixture script `scripts/demo-phase12.mjs` was removed on 2026-10-02.
+
 **Structure Decision**: Same single-repo, two-app layout as today. All new backend logic lives under `backend/src/` in small, single-responsibility modules (`auth/session`, `auth/rate-limit`, `auth/password-policy`, `audit`, `account`), mirroring the existing `auth/` + `common/` + `permissions/` organization. One Prisma migration introduces the three new tables and the two new `SharePermission` columns. Frontend changes are confined to the existing `services/`, `context/`, `components/`, and `pages/` directories plus one new component. No new top-level directories; no monorepo restructuring; no new runtime service (no Redis, no token broker) — the single Postgres instance already running in the deployment is the only stateful backend.
 
 ## Design Approach (summary of Phase 0 decisions — full rationale in research.md)

@@ -200,6 +200,19 @@ direction, any time).
 - New: each recipient entry in the list's sharing metadata exposes
   `consent: "pending" | "revealed" | "declined"` to the **owner only**.
 
+### GET /lists/:listId/share-permissions (owner) and GET /lists/:listId/recipients (recipient)
+
+- New (contractually pinned, 2026-10-02): the **ordering** of the
+  shared-recipient entries in both responses (FR-029). Both endpoints merge
+  the list's registered shares and pending invitations, then order:
+  1. identified (name-revealed) entries alphabetically by display name;
+  2. (recipient view only) the viewer's own masked entry, when present;
+  3. all remaining unidentified entries in the order they were invited
+     (share/invitation creation order).
+- The ordering MUST NOT distinguish registered from unregistered invitees by
+  position — an entry's position MUST NOT let a viewer infer whether the
+  invitee has registered (FR-010).
+
 ## Status-Code Summary (new/changed)
 
 | Endpoint | 400 | 401 | 403 | 404 | 409 | 429 | 200/201/204 |
