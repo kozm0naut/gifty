@@ -3,6 +3,9 @@ import * as api from '../services/api';
 import { getInitials } from '../utils/avatar';
 import { getNameColors } from '../utils/colors';
 
+// Grey used for the anonymous/self-mask avatar (matches ListPage self-mask).
+const MASK_GREY = '#6b7280';
+
 interface PermissionManagerProps {
   listId: string;
   onPermissionsUpdated: (permissions: api.SharePermission[]) => void;
@@ -11,7 +14,6 @@ interface PermissionManagerProps {
 
 export function PermissionManager({ listId, onPermissionsUpdated, compact }: PermissionManagerProps) {
   const [permissions, setPermissions] = useState<api.SharePermission[]>([]);
-  const [pendingInvitations, setPendingInvitations] = useState<api.PendingInvitation[]>([]);
   const [email, setEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
   const [isRevoking, setIsRevoking] = useState<string | null>(null);
@@ -30,18 +32,8 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
     }
   };
 
-  const loadPendingInvitations = async () => {
-    try {
-      const invitations = await api.fetchPendingInvitations(listId);
-      setPendingInvitations(invitations.filter((i) => i.status === 'pending'));
-    } catch {
-      /* pending invitations are non-critical */
-    }
-  };
-
   useEffect(() => {
     loadPermissions();
-    loadPendingInvitations();
   }, [listId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -60,7 +52,6 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
       setEmail('');
       setSuccess('Invitation sent successfully!');
       await loadPermissions();
-      await loadPendingInvitations();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to send invitation');
@@ -104,20 +95,6 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
         </button>
       </form>
 
-      {pendingInvitations.length > 0 && (
-        <div className="pending-invitations">
-          <h4 className="muted recipient-heading">Pending invitations</h4>
-          <ul className="recipient-list">
-            {pendingInvitations.map((i) => (
-              <li key={i.id} className="recipient-row">
-                <span className="recipient-name">{i.inviteeEmail}</span>
-                <span className="faint">not registered yet</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <div>
         <h4 className="muted recipient-heading">
           Shared with
@@ -133,30 +110,42 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
           <p className="faint recipient-empty">No one has access to this list yet.</p>
         ) : (
           <ul className="recipient-list">
-            {permissions.map((p) => (
-              <li
-                key={p.id}
-                className="recipient-row"
-              >
-                <span className="recipient-name">
-                  <span
-                    className="avatar recipient-avatar"
-                    style={{ background: getNameColors(p.recipientDisplayName, true).primary }}
-                    title={p.recipientDisplayName}
-                  >
-                    {getInitials(p.recipientDisplayName)}
+            {permissions.map((p) => {
+              // Uniform share view (Phase 12, FR-010/FR-021): every entry
+              // renders the same way — the invite email (the owner's source of
+              // truth) plus the display name ONLY when the recipient consented
+              // to reveal (recipientDisplayName is non-null). Nothing here
+              // distinguishes a registered recipient from an unregistered
+              // invitee.
+              const name = p.recipientDisplayName;
+              const label = name ?? (p.recipientEmail ?? '');
+              // No revealed name → grey "?" avatar (same self-mask look as the
+              // recipient view), so the owner can't tell registration apart by
+              // avatar color or initials.
+              const anonymous = !name;
+              return (
+                <li key={p.id} className="recipient-row">
+                  <span className="recipient-name">
+                    <span
+                      className="avatar recipient-avatar"
+                      style={{ background: anonymous ? MASK_GREY : getNameColors(label, true).primary }}
+                      title={name ? `${name} (${p.recipientEmail ?? ''})` : (p.recipientEmail ?? '')}
+                    >
+                      {anonymous ? '?' : getInitials(label)}
+                    </span>
+                    {label}
+                    {name && <span className="faint recipient-email"> ({p.recipientEmail ?? ''})</span>}
                   </span>
-                  {p.recipientDisplayName}
-                </span>
-                <button
-                  className="btn btn-danger-outline btn-sm"
-                  onClick={() => handleRevoke(p.id)}
-                  disabled={isRevoking === p.id}
-                >
-                  {isRevoking === p.id ? '...' : 'Revoke'}
-                </button>
-              </li>
-            ))}
+                  <button
+                    className="btn btn-danger-outline btn-sm"
+                    onClick={() => handleRevoke(p.id)}
+                    disabled={isRevoking === p.id}
+                  >
+                    {isRevoking === p.id ? '...' : 'Revoke'}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

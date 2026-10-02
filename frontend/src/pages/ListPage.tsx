@@ -193,12 +193,34 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
   // API already returns the viewer's own name); it keeps the sharing section
   // honest about what is actually visible to others. Owner (consent === null)
   // and already-revealed recipients are unaffected.
+  // Anonymous placeholder (grey circle with "?") — one visual for: the
+  // viewer's OWN entry while their consent is not `revealed` (self-mask,
+  // FR-023), and every other entry whose recipient has not consented to
+  // reveal (unregistered invitees included — indistinguishable, FR-010/FR-021).
+  const MASK_GREY = '#6b7280';
+  // Self-mask (FR-023): in the recipient view the API ALWAYS returns the
+  // viewer's own name (it is their own identity), so their own entry must be
+  // masked client-side to mirror what a co-recipient would see. `null` = not a
+  // recipient (owner / consent read failed) → consent UI hidden, no self-mask.
   const maskSelf = consent !== null && consent !== 'revealed';
-  const selfMasked = (r: api.SharePermission) => maskSelf && r.recipientUserId === user?.id;
-  const displayName = (r: api.SharePermission) => (selfMasked(r) ? '????' : r.recipientDisplayName);
+  // `recipientUserId` exists only on the recipient-facing `/recipients` shape
+  // (the owner's uniform view omits it by design). `undefined === user?.id`
+  // is always false, so this is safe for both shapes.
+  const isOwnEntry = (r: api.SharePermission) => r.recipientUserId === user?.id;
+  const anonymous = (r: api.SharePermission) =>
+    (maskSelf && isOwnEntry(r)) ||
+    !r.recipientDisplayName ||
+    r.recipientDisplayName === '????'; // backend ANONYMOUS_DISPLAY_NAME (non-revealed, recipient view)
+  const displayName = (r: api.SharePermission) =>
+    anonymous(r)
+      ? maskSelf && isOwnEntry(r)
+        ? '???? (You)'
+        : r.recipientEmail ?? '????'
+      : r.recipientDisplayName ?? r.recipientEmail ?? '????';
   const displayColor = (r: api.SharePermission) =>
-    selfMasked(r) ? '#6b7280' : getNameColors(r.recipientDisplayName, true).primary;
-  const displayInitials = (r: api.SharePermission) => (selfMasked(r) ? '?' : getInitials(r.recipientDisplayName));
+    anonymous(r) ? MASK_GREY : getNameColors(r.recipientDisplayName ?? r.recipientEmail ?? '???', true).primary;
+  const displayInitials = (r: api.SharePermission) =>
+    anonymous(r) ? '?' : getInitials(r.recipientDisplayName ?? r.recipientEmail ?? '???');
 
   return (
     <div

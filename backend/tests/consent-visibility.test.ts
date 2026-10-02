@@ -233,23 +233,88 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     }
   });
 
-  it('the owner sees the recipient identity and the invite email in the sharing view', async () => {
+  it('owner view: the recipient name is hidden until the recipient consents to reveal, then shown (T060, FR-021)', async () => {
     const app = await createApp();
     const owner = await register(app, 'vis5-owner', 'Owner');
     const anon = await register(app, 'vis5-anon', 'Owner Visible Recip');
     const listId = await createList(app, owner, 'Visibility List 5');
     await shareWith(app, owner, listId, anon);
 
+    // Before consent: the owner sees the invite email (source of truth) but NOT
+    // the recipient's display name.
     const res = await request(app)
       .get(`/lists/${listId}/share-permissions`)
       .set('Cookie', `gifty_access=${owner.access}`);
     expect(res.status).toBe(200);
-    const entry = res.body.permissions.find((p: any) => p.recipientUserId === anon.id);
+    const entry = res.body.permissions.find((p: any) => p.recipientEmail === anon.email);
     expect(entry).toBeTruthy();
-    // Owner sees the name…
-    expect(entry.recipientDisplayName).toBe('Owner Visible Recip');
-    // …and the invite email (source of truth for the owner's sharing view).
     expect(entry.recipientEmail).toBe(anon.email);
+    expect(entry.recipientDisplayName ?? null).toBeNull();
+    // The uniform entry carries no registration-status fields at all.
+    expect(entry).not.toHaveProperty('recipientUserId');
+    expect(entry).not.toHaveProperty('consent');
+    expect(JSON.stringify(res.body)).not.toContain('Owner Visible Recip');
+
+    // After the recipient consents to reveal: the owner may see the name.
+    await setConsent(app, anon, listId, 'revealed');
+    const res2 = await request(app)
+      .get(`/lists/${listId}/share-permissions`)
+      .set('Cookie', `gifty_access=${owner.access}`);
+    const entry2 = res2.body.permissions.find((p: any) => p.recipientEmail === anon.email);
+    expect(entry2.recipientDisplayName).toBe('Owner Visible Recip');
+  });
+
+  it('owner view: registered-unconsented and unregistered invitees are indistinguishable (T060, FR-010/FR-021)', async () => {
+    const app = await createApp();
+    const owner = await register(app, 'vis8-owner', 'Owner');
+    const registered = await register(app, 'vis8-reg', 'Registered Unconsented');
+    const ghostEmail = uniqueEmail('vis8-ghost'); // no account
+    const listId = await createList(app, owner, 'Uniform View List');
+
+    // Invite one registered user (who never consents) and one unregistered email.
+    await shareWith(app, owner, listId, registered);
+    const ghostShare = await request(app)
+      .post(`/lists/${listId}/share`)
+      .set('Cookie', `gifty_access=${owner.access}`)
+      .send({ recipientEmail: ghostEmail, permission: 'shared' });
+    expect([200, 201]).toContain(ghostShare.status);
+
+    const res = await request(app)
+      .get(`/lists/${listId}/share-permissions`)
+      .set('Cookie', `gifty_access=${owner.access}`);
+    expect(res.status).toBe(200);
+    const body = res.body;
+
+    // (a) Registration status is not viewable: no separate pending-invitations
+    // array and no field that flags which entries are registered.
+    expect(body).not.toHaveProperty('pendingInvitations');
+    expect(Array.isArray(body.permissions)).toBe(true);
+    expect(body.permissions).toHaveLength(2);
+    const reg = body.permissions.find((p: any) => p.recipientEmail === registered.email);
+    const ghost = body.permissions.find((p: any) => p.recipientEmail === ghostEmail);
+    expect(reg).toBeTruthy();
+    expect(ghost).toBeTruthy();
+
+    // No per-entry field may fingerprint registration status.
+    for (const entry of [reg, ghost]) {
+      expect(entry).not.toHaveProperty('recipientUserId');
+      expect(entry).not.toHaveProperty('consent');
+    }
+
+    // (b) Display name hidden for BOTH: the registered invitee never consented.
+    expect(reg.recipientDisplayName ?? null).toBeNull();
+    expect(ghost.recipientDisplayName ?? null).toBeNull();
+    expect(JSON.stringify(body)).not.toContain('Registered Unconsented');
+
+    // The two entries are uniform apart from their identity keys (id/email):
+    // same keys, same values for every shared field.
+    const sharedKeys = ['permission', 'recipientDisplayName'];
+    for (const key of sharedKeys) {
+      expect(reg[key]).toEqual(ghost[key]);
+    }
+    // Both entries carry the invite email — the owner's source of truth.
+    expect(reg.recipientEmail).toBe(registered.email);
+    expect(ghost.recipientEmail).toBe(ghostEmail);
   });
 
   it('consent is per-list: revealing on one list does not reveal on another (edge case)', async () => {
@@ -296,7 +361,7 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     const perms = await request(app)
       .get(`/lists/${listId}/share-permissions`)
       .set('Cookie', `gifty_access=${owner.access}`);
-    const permId = perms.body.permissions.find((p: any) => p.recipientUserId === re.id).id;
+    const permId = perms.body.permissions.find((p: any) => p.recipientEmail === re.email).id;
     const revokeRes = await request(app)
       .delete(`/lists/${listId}/share/${permId}`)
       .set('Cookie', `gifty_access=${owner.access}`);

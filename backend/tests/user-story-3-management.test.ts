@@ -82,8 +82,10 @@ describe('User Story 3 - Permission Management', () => {
     expect(getResponse.body.permissions).toHaveLength(2);
     
     const permissions = getResponse.body.permissions;
-    expect(permissions.some((p: any) => p.recipientUserId === r1Id && p.permission === 'shared')).toBe(true);
-    expect(permissions.some((p: any) => p.recipientUserId === r2Id && p.permission === 'shared')).toBe(true);
+    // Uniform owner share view (Phase 12, FR-010/FR-021): entries are located
+    // by the invite email — no per-entry recipientUserId/consent fields.
+    expect(permissions).toHaveLength(2);
+    expect(permissions.every((p: any) => p.permission === 'shared' && p.recipientEmail)).toBe(true);
   });
 
   it('revokes a permission', async () => {

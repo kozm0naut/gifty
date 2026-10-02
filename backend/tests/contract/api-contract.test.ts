@@ -17,13 +17,14 @@ function accessCookie(setCookieHeader: unknown): string {
   throw new Error('no gifty_access cookie in response');
 }
 
-type User = { id: string; access: string };
+type User = { id: string; email: string; access: string };
 
 async function register(app: any, prefix: string, displayName: string): Promise<User> {
+  const email = uniqueEmail(prefix);
   const res = await request(app)
     .post('/auth/register')
-    .send({ email: uniqueEmail(prefix), password: 'Password123!', displayName });
-  return { id: res.body.user.id, access: accessCookie(res.headers['set-cookie']) };
+    .send({ email, password: 'Password123!', displayName });
+  return { id: res.body.user.id, email, access: accessCookie(res.headers['set-cookie']) };
 }
 
 beforeEach(async () => {
@@ -179,7 +180,14 @@ describe('API contract: sharing', () => {
     const res = await request(app).get(`/lists/${listRes.body.list.id}/share-permissions`).set('Cookie', `gifty_access=${owner.access}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.permissions)).toBe(true);
-    expect(res.body.permissions[0]).toHaveProperty('recipientDisplayName');
+    // Uniform owner share view (T058/T060, FR-010/FR-021): a single
+    // `permissions` array (pending invitations included — no separate
+    // `pendingInvitations` array), the invite email as the owner's source of
+    // truth, and the recipient display name only after consent to reveal.
+    expect(res.body).not.toHaveProperty('pendingInvitations');
+    const entry = res.body.permissions[0];
+    expect(entry.recipientEmail).toBe(recipient.email);
+    expect(entry.recipientDisplayName ?? null).toBeNull();
   });
 
   it('DELETE /lists/:listId/share/:permissionId returns 204', async () => {

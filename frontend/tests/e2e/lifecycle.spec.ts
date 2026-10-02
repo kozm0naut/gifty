@@ -96,9 +96,12 @@ test.describe('T038: Lifecycle & permission UX', () => {
     await page.goto(`/list/${list.id}`);
     await page.waitForSelector('text=Throw Blanket');
 
-    // Owner revokes recipient's access via API
+    // Owner revokes recipient's access via API. The uniform share-permissions
+    // view carries the invite email (not recipientUserId), so match on email.
     const { permissions } = await apiFetchSharePermissions(owner.cookie, list.id);
-    const permission = permissions.find((p) => p.recipientUserId === recipient.user.id);
+    const permission = permissions.find(
+      (p) => p.recipientEmail?.toLowerCase() === recipientEmail.toLowerCase(),
+    );
     if (permission) {
       await apiRevokePermission(owner.cookie, list.id, permission.id);
     }

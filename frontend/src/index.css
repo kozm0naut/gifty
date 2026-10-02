@@ -921,6 +921,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin-left: 0.3rem;
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 50%;
@@ -1275,6 +1276,33 @@ h1 {
   margin-left: 0;
   box-shadow: none;
   font-size: 0.7rem;
+}
+
+/* ---- Mobile: stack name / email / action on separate lines ---- */
+@media (max-width: 640px) {
+  .recipient-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+    padding: 0.75rem 0;
+  }
+
+  /* Allow the email to drop onto its own line under the name. */
+  .recipient-name {
+    flex-wrap: wrap;
+    row-gap: 0.15rem;
+  }
+
+  .recipient-name .recipient-email {
+    flex-basis: 100%;
+    width: 100%;
+    align-self: flex-start;
+  }
+
+  /* Full-width, easy-to-tap action below the text. */
+  .recipient-row > .btn {
+    align-self: stretch;
+  }
 }
 
 /* ---- Auth ---- */

@@ -80,8 +80,9 @@ test.describe('pending invitations (US5, T033)', () => {
     const { lists: strangerLists } = await apiFetchLists(stranger.cookie);
     expect(strangerLists.some((l) => l.id === list.id)).toBe(false);
 
-    // The owner's sharing view lists the pending invitee by email (owner sees
-    // the invite email as the source of truth).
+    // The owner's sharing view lists the invitee by email (the owner's source
+    // of truth) WITHOUT revealing registration status (T061, FR-010/FR-021):
+    // no "not registered yet" label, no separate pending-invitations section.
     await switchUser(page, ownerEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     // The manage-sharing button has an explicit aria-label; the surrounding
@@ -89,6 +90,8 @@ test.describe('pending invitations (US5, T033)', () => {
     // the real button directly.
     await page.locator('button.share-btn[aria-label="Manage Sharing"]').click();
     await expect(page.getByText(inviteeEmail, { exact: false })).toBeVisible();
+    await expect(page.getByText(/not registered yet/i)).toHaveCount(0);
+    await expect(page.getByText(/Pending invitations/i)).toHaveCount(0);
   });
 
   test('re-sharing to the same unknown email does not create duplicates', async ({ page }) => {

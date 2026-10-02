@@ -58,9 +58,14 @@ export interface ApiList {
 export interface ApiSharePermission {
   id: string;
   giftListId: string;
-  recipientUserId: string;
-  recipientDisplayName: string;
+  /** Present only on the recipient-facing `/recipients` shape; the owner's
+   *  uniform share-permissions view omits it (it would fingerprint
+   *  registration status) and carries the invite email instead. */
+  recipientUserId?: string | null;
+  recipientDisplayName: string | null;
   permission: string;
+  /** Invite email — the owner's source of truth for every uniform entry. */
+  recipientEmail?: string | null;
 }
 
 // --- API helpers ---

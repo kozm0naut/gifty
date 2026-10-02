@@ -66,16 +66,26 @@ export type DashboardList = GiftList & {
 /** Name-disclosure consent state on a list (US5, FR-021–FR-024). */
 export type ConsentState = 'pending' | 'revealed' | 'declined';
 
+/**
+ * A row in the owner's uniform share view (Phase 12, FR-010/FR-021). Covers
+ * BOTH registered recipients (SharePermission) and unregistered invitees
+ * (PendingInvitation) — the response never distinguishes the two, and
+ * deliberately carries NO `consent` field (it would fingerprint registration
+ * status). `recipientDisplayName` is present ONLY when that recipient is
+ * registered and has consented to reveal; otherwise it is null (the owner
+ * sees the invite email only). `recipientUserId` is ABSENT on the owner's
+ * uniform view (it would fingerprint registration too) but present on the
+ * recipient-facing `/recipients` shape — hence optional.
+ */
 export type SharePermission = {
   id: string;
-  /** Null for a pending invitation (shared to an unregistered email). */
-  recipientUserId: string | null;
-  recipientDisplayName: string;
+  /** Present only in the recipient-facing `/recipients` shape. */
+  recipientUserId?: string | null;
+  /** Display name — only when the recipient consented to reveal. */
+  recipientDisplayName: string | null;
   permission: 'shared';
-  /** Invite email — owner-only visibility (FR-010/FR-025). */
+  /** Invite email — the owner's source of truth for every entry. */
   recipientEmail?: string | null;
-  /** The recipient's name-disclosure consent on this list (US5). */
-  consent?: ConsentState;
 };
 
 // Session termination (FR-027): the session was ended — either expired,
@@ -310,29 +320,15 @@ export async function unpurchaseGiftItem(itemId: string): Promise<GiftItem> {
   return data.item;
 }
 
+/**
+ * Owner-only: the list's uniform share entries (Phase 12, FR-010/FR-021).
+ * Registered recipients and unregistered invitees appear in the SAME array
+ * with no distinguishing fields; each entry carries the invite email and a
+ * display name only when that recipient consented to reveal.
+ */
 export async function fetchSharePermissions(listId: string): Promise<SharePermission[]> {
   const data = await apiFetch<{ permissions: SharePermission[] }>(`/lists/${listId}/share-permissions`);
   return data.permissions ?? [];
-}
-
-/** A pending invitation: shared to an email with no account yet (US5). */
-export type PendingInvitation = {
-  id: string;
-  giftListId: string;
-  inviteeEmail: string;
-  status: 'pending' | 'matched' | 'discarded';
-  createdAt: string;
-};
-
-/**
- * Owner-only: the list's pending invitations (shared to emails that have not
- * registered yet). The owner sees the invite email as the source of truth.
- */
-export async function fetchPendingInvitations(listId: string): Promise<PendingInvitation[]> {
-  const data = await apiFetch<{ pendingInvitations: PendingInvitation[] }>(
-    `/lists/${listId}/share-permissions`,
-  );
-  return data.pendingInvitations ?? [];
 }
 
 export async function revokePermission(listId: string, permissionId: string): Promise<void> {

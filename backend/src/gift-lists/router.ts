@@ -358,37 +358,59 @@ export function createListRouter() {
       return res.status(404).json({ message: 'List not found' });
     }
 
+    // Phase 12 uniform view: the owner revokes entries by the same `id`
+    // whether the underlying row is a SharePermission (registered) or a
+    // PendingInvitation (unregistered invitee) — the owner cannot tell which,
+    // so revocation must work for both.
     const permission = await prisma.sharePermission.findUnique({
       where: { id: permissionId },
     });
 
-    if (!permission || permission.giftListId !== listId) {
+    if (permission && permission.giftListId === listId) {
+      await prisma.sharePermission.delete({ where: { id: permissionId } });
       recordAuditEvent({
         actorUserId: req.user!.id,
         action: 'list_revoke',
         targetType: 'giftList',
         targetId: listId,
-        outcome: 'denied',
+        outcome: 'success',
         ip: clientIp(req),
-        detail: { reason: 'permission_not_found' },
+        detail: { permissionId },
       });
-      return res.status(404).json({ message: 'Permission not found for this list' });
+      return res.status(204).send();
     }
 
-    await prisma.sharePermission.delete({
+    const invitation = await prisma.pendingInvitation.findUnique({
       where: { id: permissionId },
     });
+
+    if (invitation && invitation.giftListId === listId && invitation.status === 'pending') {
+      await prisma.pendingInvitation.update({
+        where: { id: permissionId },
+        data: { status: 'discarded' },
+      });
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'list_revoke',
+        targetType: 'giftList',
+        targetId: listId,
+        outcome: 'success',
+        ip: clientIp(req),
+        detail: { permissionId, inviteeEmail: invitation.inviteeEmail },
+      });
+      return res.status(204).send();
+    }
 
     recordAuditEvent({
       actorUserId: req.user!.id,
       action: 'list_revoke',
       targetType: 'giftList',
       targetId: listId,
-      outcome: 'success',
+      outcome: 'denied',
       ip: clientIp(req),
-      detail: { permissionId },
+      detail: { reason: 'permission_not_found' },
     });
-    res.status(204).send();
+    return res.status(404).json({ message: 'Permission not found for this list' });
   });
 
   router.get('/:listId/share-permissions', authorizeList('manage'), async (req: AuthenticatedRequest, res) => {
@@ -399,9 +421,13 @@ export function createListRouter() {
       return res.status(404).json({ message: 'List not found' });
     }
 
-    // Owner-only sharing view (FR-011/FR-025): the owner sees the recipient
-    // display names, the invite emails (source of truth), each recipient's
-    // name-disclosure consent state, and any pending invitations.
+    // Owner-only sharing view (FR-010/FR-021/FR-025, Phase 12 uniform view):
+    // ONE uniform `permissions` array covering both registered recipients
+    // (SharePermission) and unregistered invitees (PendingInvitation). The
+    // owner sees the invite email (source of truth) for every entry, and a
+    // recipient's display name ONLY when that recipient's name-disclosure
+    // consent on the list is `revealed`. Nothing in the response shape
+    // distinguishes registered from unregistered invitees.
     const [permissions, pendingInvitations] = await Promise.all([
       prisma.sharePermission.findMany({
         where: { giftListId: listId },
@@ -414,19 +440,33 @@ export function createListRouter() {
           },
         },
       }),
-      prisma.pendingInvitation.findMany({ where: { giftListId: listId } }),
+      prisma.pendingInvitation.findMany({
+        where: { giftListId: listId, status: 'pending' },
+      }),
     ]);
 
-    const formattedPermissions = permissions.map((p) => ({
-      id: p.id,
-      recipientUserId: p.recipientUserId,
-      recipientDisplayName: p.recipient.displayName,
-      permission: p.permission,
-      recipientEmail: p.recipientEmail,
-      consent: p.nameDisclosureConsent,
-    }));
+    // Uniform entry shape: { id, recipientDisplayName?, permission,
+    // recipientEmail }. Deliberately NO `recipientUserId` (non-null would
+    // fingerprint "registered") and NO `consent` (non-null would do the same) —
+    // the owner cannot distinguish registered from unregistered invitees, and
+    // consent state is the recipient's private choice, not owner-queryable.
+    const uniform = [
+      ...permissions.map((p) => ({
+        id: p.id,
+        recipientDisplayName:
+          p.nameDisclosureConsent === 'revealed' ? p.recipient.displayName : null,
+        permission: p.permission,
+        recipientEmail: p.recipientEmail,
+      })),
+      ...pendingInvitations.map((i) => ({
+        id: i.id,
+        recipientDisplayName: null,
+        permission: 'shared' as const,
+        recipientEmail: i.inviteeEmail,
+      })),
+    ];
 
-    res.status(200).json({ permissions: formattedPermissions, pendingInvitations });
+    res.status(200).json({ permissions: uniform });
   });
 
   // Feature 003 (US5, FR-021/FR-022/FR-023): name-disclosure consent.
@@ -508,17 +548,29 @@ export function createListRouter() {
       return res.status(404).json({ message: 'List not found' });
     }
 
-    const permissions = await prisma.sharePermission.findMany({
-      where: { giftListId: listId },
-      include: {
-        recipient: {
-          select: {
-            id: true,
-            displayName: true,
+    // Registration-enumeration guard (FR-010/FR-021, Phase 12): return BOTH
+    // registered recipients (SharePermission) AND unregistered pending
+    // invitees (PendingInvitation) so the row count is identical to the
+    // owner's uniform share view. A co-recipient can therefore no longer
+    // infer who is unregistered from the number of entries they see — a
+    // pending invitee is indistinguishable from a registered recipient who
+    // has not yet consented to reveal their name.
+    const [permissions, pendingInvitations] = await Promise.all([
+      prisma.sharePermission.findMany({
+        where: { giftListId: listId },
+        include: {
+          recipient: {
+            select: {
+              id: true,
+              displayName: true,
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.pendingInvitation.findMany({
+        where: { giftListId: listId, status: 'pending' },
+      }),
+    ]);
 
     const isOwner = list.ownerUserId === req.user!.id;
 
@@ -527,20 +579,30 @@ export function createListRouter() {
     // on this list. The recipient always sees their own name (it is their
     // own identity), and the owner always sees names (the owner's sharing
     // view is the source of truth).
-    const recipients = permissions.map((p) => {
-      const ownEntry = p.recipientUserId === req.user!.id;
-      const visibleName =
-        isOwner ||
-        ownEntry ||
-        p.nameDisclosureConsent === 'revealed'
-          ? p.recipient.displayName
-          : ANONYMOUS_DISPLAY_NAME;
-      return {
-        id: p.id,
-        recipientUserId: p.recipientUserId,
-        recipientDisplayName: visibleName,
-      };
-    });
+    const recipients = [
+      ...permissions.map((p) => {
+        const ownEntry = p.recipientUserId === req.user!.id;
+        const visibleName =
+          isOwner ||
+          ownEntry ||
+          p.nameDisclosureConsent === 'revealed'
+            ? p.recipient.displayName
+            : ANONYMOUS_DISPLAY_NAME;
+        return {
+          id: p.id,
+          recipientUserId: p.recipientUserId,
+          recipientDisplayName: visibleName,
+        };
+      }),
+      // Unregistered invitees: same anonymous placeholder for every viewer,
+      // with NO email and NO userId (either would fingerprint registration
+      // status or leak the invitee's email to a co-recipient).
+      ...pendingInvitations.map((i) => ({
+        id: i.id,
+        recipientUserId: null,
+        recipientDisplayName: ANONYMOUS_DISPLAY_NAME,
+      })),
+    ];
 
     res.status(200).json({ recipients });
   });
