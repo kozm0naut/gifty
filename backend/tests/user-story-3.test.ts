@@ -5,6 +5,18 @@ import { createApp } from '../src/app.js';
 
 const uniqueEmail = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
 
+/** Extract the `gifty_access` value from a supertest Set-Cookie header. */
+function accessCookie(setCookieHeader: unknown): string {
+  const arr = Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : [];
+  for (const c of arr) {
+    const s = String(c);
+    if (s.startsWith('gifty_access=')) {
+      return s.split(';')[0].slice('gifty_access='.length);
+    }
+  }
+  throw new Error('no gifty_access cookie in response');
+}
+
 describe('User Story 3 - Share a list with trusted recipients', () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret';
@@ -38,34 +50,34 @@ describe('User Story 3 - Share a list with trusted recipients', () => {
 
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`)
       .send({ title: 'Shared Wedding List', description: 'List for friends' });
 
     // Act
     const shareResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/share`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`)
       .send({ recipientUserId: recipientResponse.body.user.id, permission: 'shared' as any });
 
     const ownerLists = await request(app)
       .get('/lists')
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`);
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`);
 
     const recipientLists = await request(app)
       .get('/lists')
-      .set('Authorization', `Bearer ${recipientResponse.body.token}`);
+      .set('Cookie', `gifty_access=${accessCookie(recipientResponse.headers['set-cookie'])}`);
 
     const outsiderLists = await request(app)
       .get('/lists')
-      .set('Authorization', `Bearer ${outsiderResponse.body.token}`);
+      .set('Cookie', `gifty_access=${accessCookie(outsiderResponse.headers['set-cookie'])}`);
 
     const recipientDetail = await request(app)
       .get(`/lists/${listResponse.body.list.id}`)
-      .set('Authorization', `Bearer ${recipientResponse.body.token}`);
+      .set('Cookie', `gifty_access=${accessCookie(recipientResponse.headers['set-cookie'])}`);
 
     const outsiderDetail = await request(app)
       .get(`/lists/${listResponse.body.list.id}`)
-      .set('Authorization', `Bearer ${outsiderResponse.body.token}`);
+      .set('Cookie', `gifty_access=${accessCookie(outsiderResponse.headers['set-cookie'])}`);
 
     // Assert
     expect(shareResponse.status).toBe(201);
@@ -98,32 +110,32 @@ describe('User Story 3 - Share a list with trusted recipients', () => {
 
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`)
       .send({ title: 'Claim Test List', description: 'For claim testing' });
 
     await request(app)
       .post(`/lists/${listResponse.body.list.id}/share`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`)
       .send({ recipientUserId: recipientResponse.body.user.id, permission: 'shared' as any });
 
     const itemResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`)
       .send({ name: 'Headphones', quantity: 1, description: 'Noise cancelling' });
 
     // Act
     const claimResponse = await request(app)
       .post(`/items/${itemResponse.body.item.id}/claim`)
-      .set('Authorization', `Bearer ${recipientResponse.body.token}`)
+      .set('Cookie', `gifty_access=${accessCookie(recipientResponse.headers['set-cookie'])}`)
       .send({ claimantUserId: recipientResponse.body.user.id });
 
     const ownerView = await request(app)
       .get(`/lists/${listResponse.body.list.id}`)
-      .set('Authorization', `Bearer ${ownerResponse.body.token}`);
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`);
 
     const recipientView = await request(app)
       .get(`/lists/${listResponse.body.list.id}`)
-      .set('Authorization', `Bearer ${recipientResponse.body.token}`);
+      .set('Cookie', `gifty_access=${accessCookie(recipientResponse.headers['set-cookie'])}`);
 
     // Assert
     expect(claimResponse.status).toBe(200);

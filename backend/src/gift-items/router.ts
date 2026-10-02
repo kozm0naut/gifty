@@ -4,7 +4,9 @@ import { makeId } from '../common/id.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/middleware.js';
 import { authorizeItem, authorizeList } from '../auth/middleware.js';
 import { validateCreateGiftItem } from './gift-item.validation.js';
-import { resolveIdentityNames, decorateItemIdentity } from '../common/identity.js';
+import { resolveConsentedIdentityNames, decorateItemIdentity } from '../common/identity.js';
+import { recordAuditEvent } from '../audit/events.js';
+import { clientIp } from '../auth/rate-limit.js';
 
 export function createItemRouter() {
   const router = Router();
@@ -54,10 +56,28 @@ export function createItemRouter() {
     // Only shared recipients may claim (enforced by the authorizeItem('claim')
     // middleware — the owner is rejected there with 403).
     if (claimantUserId !== undefined && claimantUserId !== req.user!.id) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_claim',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'claimant_mismatch' },
+      });
       return res.status(403).json({ message: 'Claim ownership must match the authenticated user' });
     }
 
     if (item.state !== 'available') {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_claim',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'not_available' },
+      });
       return res.status(409).json({ message: 'This item is no longer available to claim' });
     }
 
@@ -73,9 +93,26 @@ export function createItemRouter() {
     });
 
     if (result.count === 0) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_claim',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'lost_claim_race' },
+      });
       return res.status(409).json({ message: 'This item is no longer available to claim' });
     }
 
+    recordAuditEvent({
+      actorUserId: req.user!.id,
+      action: 'item_claim',
+      targetType: 'giftItem',
+      targetId: itemId,
+      outcome: 'success',
+      ip: clientIp(req),
+    });
     const updatedItem = await prisma.giftItem.findUnique({ where: { id: itemId } });
     return res.status(200).json({ item: updatedItem });
   });
@@ -93,10 +130,28 @@ export function createItemRouter() {
     }
 
     if (item.state !== 'claimed') {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_purchase',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'not_claimed' },
+      });
       return res.status(409).json({ message: 'This item must be claimed before it can be purchased' });
     }
 
     if (item.claimantUserId !== req.user!.id) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_purchase',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'not_claimant' },
+      });
       return res.status(403).json({ message: 'Only the claimant can purchase this item' });
     }
 
@@ -111,9 +166,26 @@ export function createItemRouter() {
     });
 
     if (result.count === 0) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_purchase',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'lost_purchase_race' },
+      });
       return res.status(409).json({ message: 'This item must be claimed before it can be purchased' });
     }
 
+    recordAuditEvent({
+      actorUserId: req.user!.id,
+      action: 'item_purchase',
+      targetType: 'giftItem',
+      targetId: itemId,
+      outcome: 'success',
+      ip: clientIp(req),
+    });
     const updatedItem = await prisma.giftItem.findUnique({ where: { id: itemId } });
     return res.status(200).json({ item: updatedItem });
   });
@@ -132,10 +204,28 @@ export function createItemRouter() {
     }
 
     if (item.state !== 'claimed') {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_revert',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'not_claimed' },
+      });
       return res.status(409).json({ message: 'This item is not in a claimed state' });
     }
 
     if (item.claimantUserId !== req.user!.id) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_revert',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'not_claimant' },
+      });
       return res.status(403).json({ message: 'Only the current claimant can revert this claim' });
     }
 
@@ -151,9 +241,26 @@ export function createItemRouter() {
     });
 
     if (result.count === 0) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_revert',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'lost_revert_race' },
+      });
       return res.status(409).json({ message: 'This item is no longer available to unclaim' });
     }
 
+    recordAuditEvent({
+      actorUserId: req.user!.id,
+      action: 'item_revert',
+      targetType: 'giftItem',
+      targetId: itemId,
+      outcome: 'success',
+      ip: clientIp(req),
+    });
     const updatedItem = await prisma.giftItem.findUnique({ where: { id: itemId } });
     return res.status(200).json({ item: updatedItem });
   });
@@ -172,11 +279,29 @@ export function createItemRouter() {
     }
 
     if (item.state !== 'purchased') {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_revert',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'not_purchased' },
+      });
       return res.status(409).json({ message: 'This item is not in a purchased state' });
     }
 
     // The purchaser is always the claimant, so authorization is anchored to the claimant.
     if (item.claimantUserId !== req.user!.id) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_revert',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'not_claimant' },
+      });
       return res.status(403).json({ message: 'Only the current claimant can revert this purchase' });
     }
 
@@ -192,9 +317,26 @@ export function createItemRouter() {
     });
 
     if (result.count === 0) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'item_revert',
+        targetType: 'giftItem',
+        targetId: itemId,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: { reason: 'lost_revert_race' },
+      });
       return res.status(409).json({ message: 'This item is no longer available to revert' });
     }
 
+    recordAuditEvent({
+      actorUserId: req.user!.id,
+      action: 'item_revert',
+      targetType: 'giftItem',
+      targetId: itemId,
+      outcome: 'success',
+      ip: clientIp(req),
+    });
     const updatedItem = await prisma.giftItem.findUnique({ where: { id: itemId } });
     return res.status(200).json({ item: updatedItem });
   });
@@ -220,10 +362,10 @@ export function createItemRouter() {
       return res.status(200).json({ items: visibleItems });
     }
 
-    // Recipient view (FR-009): expose full state plus the resolved claimant
-    // display name so shared recipients can see who acted (the purchaser is
-    // always the claimant).
-    const names = await resolveIdentityNames(items);
+    // Recipient view (FR-009): expose full state plus the consent-aware
+    // claimant display name so shared recipients can see who acted, honoring
+    // each claimant's name-disclosure consent on THIS list (FR-021/FR-024).
+    const names = await resolveConsentedIdentityNames(items, listId);
     const visibleItems = decorateItemIdentity(items, names);
     return res.status(200).json({ items: visibleItems });
   });

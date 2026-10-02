@@ -23,6 +23,18 @@ enum SharePermissionLevel {
   shared
 }
 
+enum InvitationStatus {
+  pending
+  matched
+  discarded
+}
+
+enum NameDisclosureConsent {
+  pending
+  revealed
+  declined
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -34,6 +46,9 @@ model User {
   ownedPermissions   SharePermission[] @relation("OwnerPermission")
   receivedPermissions SharePermission[] @relation("RecipientPermission")
   claimedItems       GiftItem[] @relation("Claimant")
+  userSessions       UserSession[]
+  auditEvents        AuditEvent[]   @relation("Actor")
+  ownedInvitations   PendingInvitation[]
 }
 
 model GiftList {
@@ -48,6 +63,7 @@ model GiftList {
 
   items             GiftItem[]
   sharePermissions  SharePermission[]
+  pendingInvitations PendingInvitation[]
 }
 
 model GiftItem {
@@ -78,10 +94,83 @@ model SharePermission {
   recipientUserId String
   recipient      User                 @relation("RecipientPermission", fields: [recipientUserId], references: [id])
   permission     SharePermissionLevel
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  // Consent-gated identity disclosure (FR-020/FR-021/FR-023): the invitee's
+  // email may be pre-populated when the invitation targets it, and the owner
+  // only sees the recipient's name after they explicitly accept disclosure.
+  recipientEmail        String?
+  nameDisclosureConsent NameDisclosureConsent @default(pending)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
   @@unique([giftListId, recipientUserId])
   @@index([giftListId])
   @@index([recipientUserId])
+}
+
+// ---------------------------------------------------------------------------
+// Security hardening (feature 003) — spec: specs/003-security-hardening/
+// ---------------------------------------------------------------------------
+
+/// Server-side session record backing the HttpOnly refresh cookie (FR-007/FR-008).
+/// Only token *hashes* are stored — never raw tokens (FR-013).
+/// `previousRefreshHash` supports one-step-back refresh-token rotation and
+/// theft detection (FR-026).
+model UserSession {
+  id                  String    @id @default(uuid())
+  userId              String
+  refreshTokenHash    String
+  previousRefreshHash String?
+  issuedAt            DateTime  @default(now())
+  lastRefreshAt       DateTime  @default(now())
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@index([expiresAt])
+}
+
+/// Append-only audit trail (FR-011/FR-012). Insert-only: the API exposes no
+/// update or delete path and the app never prunes (FR-014).
+model AuditEvent {
+  id           String   @id @default(uuid())
+  actorUserId  String?
+  action       String
+  targetType   String?
+  targetId     String?
+  outcome      String
+  ip           String?
+  detail       Json?
+  createdAt    DateTime @default(now())
+
+  actor User? @relation("Actor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@index([targetType, targetId])
+}
+
+/// Pending email invitation for a gift list (FR-021). `giftListId` is the
+/// single source of truth for the target — never the free-text `detail`
+/// (FR-012). `status` starts `pending`; it becomes `matched` when the
+/// invitee signs in and the invitation is consumed, or `discarded` when it
+/// expires or is explicitly removed (FR-025).
+model PendingInvitation {
+  id           String           @id @default(uuid())
+  giftListId   String
+  inviteeEmail String
+  ownerUserId  String
+  status       InvitationStatus @default(pending)
+  createdAt    DateTime         @default(now())
+  expiresAt    DateTime?
+
+  owner    User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  giftList GiftList @relation(fields: [giftListId], references: [id], onDelete: Cascade)
+
+  @@unique([giftListId, inviteeEmail])
+  @@index([inviteeEmail, status])
 }

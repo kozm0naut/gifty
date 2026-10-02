@@ -40,14 +40,28 @@ $secret = -join ((48..57) + (97..122) + (65..90) | Get-Random -Count 48 | ForEac
 sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')|" .env && rm .env.bak
 ```
 
-Other variables (all optional, sensible dev defaults already in `.env.example`):
+Other variables (`POSTGRES_PASSWORD` is **required** — no default since the
+security-hardening boot gate; the rest are optional with the defaults shown):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `POSTGRES_DB` | `gifty` | Database name |
 | `POSTGRES_USER` | `gifty` | Database user |
-| `POSTGRES_PASSWORD` | `gifty_dev_password` | Database password (change for any shared use) |
+| `POSTGRES_PASSWORD` | *(none — required)* | Database credential. **No default** (spec 003 US3/T024); generate a strong value like `JWT_SECRET`. |
 | `PORT` | `8080` | Host port for the app URL |
+
+Set `POSTGRES_PASSWORD` the same way as `JWT_SECRET` (32+ random characters):
+
+```powershell
+# PowerShell
+$pw = -join ((48..57) + (97..122) + (65..90) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
+(Get-Content .env) -replace '^POSTGRES_PASSWORD=.*', "POSTGRES_PASSWORD=$pw" | Set-Content .env
+```
+
+```bash
+# Linux / macOS
+sed -i.bak "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')|" .env && rm .env.bak
+```
 
 > `.env` is git-ignored. Never commit secrets.
 
@@ -138,3 +152,48 @@ If you previously ran the dev-only compose setup, an old `postgres_data` volume 
 The deployment uses a new volume name (`gifty_postgres_data`) initialized with the `gifty`
 database user. Any data in the old volume is dev-only; dump/restore it if you need it
 (§5 pattern), otherwise start fresh.
+
+## 8. Security & operator settings (spec 003)
+
+In addition to `JWT_SECRET` and `POSTGRES_PASSWORD`, the app exposes a small set of
+operator-configurable security settings (feature 003, *Security Hardening*). All are
+optional — sensible defaults apply — and each is enforced at the boundary so a misconfiguration
+fails closed (e.g. an unset `CORS_ORIGINS` is **closed** in production, not open).
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CORS_ORIGINS` | *(unset)* | Comma-separated origin allow-list. **Unset = CORS closed by default** in production (no `Access-Control-Allow-Origin` is ever reflected). Set it only if you serve the app from a different origin than the API. |
+| `CSP_FONT_ORIGIN` | `https://fonts.googleapis.com,https://fonts.gstatic.com` | Permitted `font-src` origin(s) for the Content-Security-Policy header (comma- or space-separated). Leave unset to keep the app's own fonts working. |
+| `RATE_LIMIT_WINDOW_MINUTES` | `15` | Sliding window for the sign-in / registration failure budgets. |
+| `LOGIN_MAX_FAILURES_PER_SOURCE` | `10` | Max failed sign-ins per source (trusted-proxy client IP) within the window. |
+| `REGISTER_MAX_FAILURES_PER_SOURCE` | `3` | Max failed registrations per source — intentionally tighter than sign-in. |
+| `LOGIN_MAX_FAILURES_PER_ACCOUNT` | `5` | Max failed sign-ins per account (email-keyed) within the window — protects against source-IP rotation. |
+| `JWT_SECRET_MIN_LENGTH` | `32` | Minimum signing-secret length (256 bits) for the production boot gate. |
+| `ACCESS_TOKEN_TTL_MINUTES` | `10` | Short-lived access-credential lifetime (spec caps it at ≤ 1 h). |
+| `SESSION_MAX_AGE_DAYS` | `30` | Hard cap on the overall (refresh-credential) session lifetime. |
+
+The **production boot gate** (`validateConfig()`) refuses to start when `JWT_SECRET` is
+missing, below `JWT_SECRET_MIN_LENGTH`, or a known default value, or when the database
+credential is a known default — each failure message names the offending value and the fix.
+
+### Operational notes
+
+- **Single-replica rate limiting.** The failure budgets are held in memory per process.
+  Run **one** replica of the `app` container. Behind a load balancer with multiple
+  replicas, split a source's budget across replicas (each sees only its share of the
+  attempts), so the effective limit is weaker than configured. For multi-replica
+  deployments, front the auth endpoints with an external rate limiter or a shared
+  (e.g. Redis) counter.
+- **Audit retention.** Audit events (sign-in success/failure, share, claim, purchase,
+  revert, session revocation, account removal) are written to the `AuditEvent` table and
+  are **retained for a minimum of 5 years** — the app never prunes them. Back up the
+  `gifty_postgres_data` volume (§5) if you need to preserve them beyond the lifetime of
+  the database. Audit rows are operator-inspectable only; there is no user-facing audit API
+  in this feature.
+- **Supply-chain gate.** `npm run audit` (alias `audit:prod`) runs `npm audit
+  --omit=dev --audit-level=high` against both `backend/` and `frontend/` and **exits
+  non-zero on any high/critical finding**, so it can be used as a blocking CI / release
+  gate. The current tree reports **0 high / 0 critical**; the 2 remaining `react-router`
+  *moderate* advisories (CVE-2026-53666 / CVE-2026-53669) are explicitly accepted — they
+  are fixed only in `react-router` v7 (a breaking major bump) and are out of scope for the
+  "zero high/critical" success criterion.

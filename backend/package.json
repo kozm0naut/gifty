@@ -7,7 +7,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
+    "pretest": "node ../scripts/ensure-test-db.mjs",
     "test": "vitest run --maxWorkers 1 --minWorkers 1",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -18,10 +20,14 @@
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
+    "cookie": "^2.0.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "prisma": "^6.7.0",
     "uuid": "^11.0.2"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.1",

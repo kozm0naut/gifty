@@ -6,6 +6,8 @@ import { GiftItemList } from '../components/GiftItemList';
 import { PermissionManager } from '../components/PermissionManager';
 import { RenameListForm } from '../components/RenameListForm';
 import { Modal } from '../components/Modal';
+import { ConsentPrompt } from '../components/ConsentPrompt';
+import { ConsentControl } from '../components/ConsentControl';
 import { useAuth } from '../context/AuthContext';
 import { getInitials } from '../utils/avatar';
 import { getNameColors } from '../utils/colors';
@@ -23,6 +25,11 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [showRecipients, setShowRecipients] = useState(false);
   const [modal, setModal] = useState<ListModal | null>(initialModal ?? null);
+  // US5: the caller's name-disclosure consent on this list. Owned here so the
+  // one-time prompt and the self-serve control always agree. `null` means
+  // "not a recipient" (the owner, or the consent read failed / 403) and the
+  // consent UI is hidden entirely.
+  const [consent, setConsent] = useState<api.ConsentState | null>(null);
   // Ref lives on the wrapper so the popover (a sibling of the stack inside the
   // wrapper) counts as "inside" — otherwise touching the popover to scroll it
   // would be read as an outside click and close it.
@@ -105,6 +112,34 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
     };
   }, [listId, list, user?.id]);
 
+  // US5 (FR-021/FR-022): load the caller's consent state for this list once
+  // the list and viewer are known. Recipients get a `pending`/`revealed`/
+  // `declined` state; the owner (or a non-recipient) gets a 403 → `null`,
+  // which hides all consent UI.
+  useEffect(() => {
+    if (!listId || !list) return;
+    if (list.owner?.id === user?.id) {
+      setConsent(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .fetchConsent(listId)
+      .then((info) => {
+        if (!cancelled) setConsent(info.consent);
+      })
+      .catch(() => {
+        if (!cancelled) setConsent(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listId, list, user?.id]);
+
+  const handleConsentChange = (next: api.ConsentState) => {
+    setConsent(next);
+  };
+
   const handleItemAdded = (newItem: api.GiftItem) => {
     if (!list) return;
     setList({ ...list, items: [...(list.items || []), newItem] });
@@ -150,6 +185,61 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
   if (!list) return <p>List not found.</p>;
 
   const isOwner = list.owner?.id === user?.id;
+
+  // US5 (FR-023): mirror the co-recipient view for the viewer's OWN entry in
+  // the sharing stack. When the viewer has not consented to name disclosure on
+  // this list, their own avatar/name render as the anonymous placeholder — the
+  // same thing every other non-revealing recipient sees. Purely cosmetic (the
+  // API already returns the viewer's own name); it keeps the sharing section
+  // honest about what is actually visible to others. Owner (consent === null)
+  // and already-revealed recipients are unaffected.
+  // Anonymous placeholder (grey circle with "?") — one visual for: the
+  // viewer's OWN entry while their consent is not `revealed` (self-mask,
+  // FR-023), and every other entry whose recipient has not consented to
+  // reveal (unregistered invitees included — indistinguishable, FR-010/FR-021).
+  const MASK_GREY = '#6b7280';
+  // Self-mask (FR-023): in the recipient view the API ALWAYS returns the
+  // viewer's own name (it is their own identity), so their own entry must be
+  // masked client-side to mirror what a co-recipient would see. `null` = not a
+  // recipient (owner / consent read failed) → consent UI hidden, no self-mask.
+  const maskSelf = consent !== null && consent !== 'revealed';
+  // `recipientUserId` exists only on the recipient-facing `/recipients` shape
+  // (the owner's uniform view omits it by design). `undefined === user?.id`
+  // is always false, so this is safe for both shapes.
+  const isOwnEntry = (r: api.SharePermission) => r.recipientUserId === user?.id;
+  const anonymous = (r: api.SharePermission) =>
+    (maskSelf && isOwnEntry(r)) ||
+    !r.recipientDisplayName ||
+    r.recipientDisplayName === '????'; // backend ANONYMOUS_DISPLAY_NAME (non-revealed, recipient view)
+  const displayName = (r: api.SharePermission) =>
+    anonymous(r)
+      ? maskSelf && isOwnEntry(r)
+        ? '???? (You)'
+        : r.recipientEmail ?? '????'
+      : r.recipientDisplayName ?? r.recipientEmail ?? '????';
+  const displayColor = (r: api.SharePermission) =>
+    anonymous(r) ? MASK_GREY : getNameColors(r.recipientDisplayName ?? r.recipientEmail ?? '???', true).primary;
+  const displayInitials = (r: api.SharePermission) =>
+    anonymous(r) ? '?' : getInitials(r.recipientDisplayName ?? r.recipientEmail ?? '???');
+
+  // Display order for the "Shared with" list (avatar stack + popover):
+  //   1. Revealed recipients, alphabetical by display name
+  //   2. Self (viewer's own masked entry) — only present in recipient view
+  //   3. Remaining unknowns (unregistered or non-revealed others)
+  const sortedRecipients = [...recipients].sort((a, b) => {
+    const cat = (r: api.SharePermission): number => {
+      if (!anonymous(r)) return 0;            // revealed
+      if (maskSelf && isOwnEntry(r)) return 1; // self (masked)
+      return 2;                                 // other unknown
+    };
+    const ca = cat(a), cb = cat(b);
+    if (ca !== cb) return ca - cb;
+    if (ca === 0) {
+      // Alphabetical by display name within the revealed group.
+      return (a.recipientDisplayName ?? '').localeCompare(b.recipientDisplayName ?? '');
+    }
+    return 0;
+  });
 
   return (
     <div
@@ -229,22 +319,22 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
               Loading…
             </span>
           )}
-          {recipients.slice(0, 8).map((r) => (
+          {sortedRecipients.slice(0, 8).map((r) => (
             <span
               key={r.id}
               className="avatar"
-              style={{ background: getNameColors(r.recipientDisplayName, true).primary }}
-              title={r.recipientDisplayName}
+              style={{ background: displayColor(r) }}
+              title={displayName(r)}
             >
-              {getInitials(r.recipientDisplayName)}
+              {displayInitials(r)}
             </span>
           ))}
-          {recipients.length > 8 && (
+          {sortedRecipients.length > 8 && (
             <span
               className="avatar avatar-more"
-              title={recipients.slice(8).map((r) => r.recipientDisplayName).join('\n')}
+              title={sortedRecipients.slice(8).map((r) => displayName(r)).join('\n')}
             >
-              +{recipients.length - 8}
+              +{sortedRecipients.length - 8}
             </span>
           )}
           {isOwner && (
@@ -282,20 +372,25 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
               Shared with {recipients.length} {recipients.length === 1 ? 'person' : 'people'}
             </div>
             <ul className="avatar-popover-list">
-              {recipients.map((r) => (
+              {sortedRecipients.map((r) => (
                 <li key={r.id} className="avatar-popover-item">
                   <span
                     className="avatar-popover-dot"
-                    style={{ background: getNameColors(r.recipientDisplayName, true).primary }}
+                    style={{ background: displayColor(r) }}
                     aria-hidden="true"
                   />
-                  {r.recipientDisplayName}
+                  {displayName(r)}
                 </li>
               ))}
             </ul>
           </div>
         )}
         </div>
+
+        {/* US5 (FR-023): self-serve name-disclosure control — recipients only. */}
+        {listId && consent !== null && (
+          <ConsentControl listId={listId} consent={consent} onChange={handleConsentChange} />
+        )}
       </section>
 
       <section className="items-section">
@@ -305,6 +400,11 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
           isOwner={isOwner}
         />
       </section>
+
+      {/* US5 (FR-022): one-time name-disclosure consent prompt — recipients only. */}
+      {listId && consent === 'pending' && (
+        <ConsentPrompt listId={listId} consent={consent} onChange={handleConsentChange} />
+      )}
 
       {modal === 'add-item' && listId && (
         <Modal title="Add Gift Item" subtitle={`to “${list.title}”`} onClose={closeModal}>

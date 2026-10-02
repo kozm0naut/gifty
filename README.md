@@ -85,7 +85,21 @@ npm test                                   # backend suite (Vitest + Supertest)
 npm --prefix frontend run test             # frontend unit tests (Vitest)
 npm --prefix frontend run test:e2e         # Playwright e2e (starts against :5173)
 BASE_URL=http://localhost:8080 npm --prefix frontend run test:e2e   # e2e against the containerized app
+npm run audit                              # supply-chain gate: 0 high/critical (backend + frontend), exits non-zero on a finding
 ```
+
+## Security & operator settings
+
+The app is security-hardened (spec 003): cookie-based two-layer sessions with
+refresh-token rotation and theft detection, per-source / per-account sign-in
+rate limiting, a production boot gate that rejects weak or default secrets,
+CORS closed by default, browser-security headers, audit logging (5-year
+retention), and a zero-high/critical supply-chain gate.
+
+All operator settings (`CORS_ORIGINS`, `CSP_FONT_ORIGIN`, the rate-limit
+budgets, secret-strength, session lifetime) are optional with safe defaults and
+are documented in **[docs/docker.md](docs/docker.md) §8**. `npm run audit`
+(= `audit:prod`) is the blocking CI / release gate for the supply chain.
 
 ## Repository layout
 

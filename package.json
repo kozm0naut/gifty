@@ -9,7 +9,14 @@
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
     "test": "npm --prefix backend run test",
-    "docker:up": "docker compose up --build -d"
+    "docker:up": "docker compose up --build -d",
+    "typecheck:backend": "npm --prefix backend run typecheck",
+    "typecheck:frontend": "npm --prefix backend exec tsc -- -p ../frontend/tsconfig.json --noEmit",
+    "test:frontend": "npm --prefix frontend run test",
+    "e2e": "node scripts/healthz.mjs && npm --prefix frontend run test:e2e:container",
+    "verify": "npm run docker:up && node scripts/healthz.mjs && npm --prefix frontend run test:e2e:container",
+    "audit:prod": "npm --prefix backend audit --omit=dev --audit-level=high && npm --prefix frontend audit --omit=dev --audit-level=high",
+    "audit": "npm run audit:prod"
   },
   "keywords": [],
   "author": "",

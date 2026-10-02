@@ -8,7 +8,7 @@ interface AuthPageProps {
 }
 
 export function AuthPage() {
-  const { login: authLogin, sessionExpiredMessage, clearSessionMessage } = useAuth();
+  const { login: authLogin, sessionNotice, clearSessionNotice } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,8 +28,10 @@ export function AuthPage() {
 
     try {
       const data = await (mode === 'login' ? login(payload) : register(payload));
-      
-      authLogin(data.user, data.token);
+
+      // The server has already set the HttpOnly session cookies; adopt the
+      // returned user into app state and move on (T027/T029).
+      authLogin(data.user);
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
@@ -46,8 +48,14 @@ export function AuthPage() {
       </div>
       <div className="card card-pad auth-card">
       <h2 className="auth-card-title">{mode === 'login' ? 'Login' : 'Register'}</h2>
-      {sessionExpiredMessage && (
-        <div className="alert alert-warning">{sessionExpiredMessage}</div>
+      {sessionNotice && (
+        sessionNotice.security ? (
+          <div className="alert alert-error" role="alert">
+            {sessionNotice.message}
+          </div>
+        ) : (
+          <div className="alert alert-warning">{sessionNotice.message}</div>
+        )
       )}
       {error && <div className="alert alert-error">{error}</div>}
       <form onSubmit={handleSubmit} className="form-stack">
@@ -96,7 +104,7 @@ export function AuthPage() {
           className="btn btn-ghost"
           onClick={() => {
             setError(null);
-            clearSessionMessage();
+            clearSessionNotice();
             setMode(mode === 'login' ? 'register' : 'login');
           }}
         >

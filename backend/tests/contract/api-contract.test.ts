@@ -5,13 +5,26 @@ import { createApp } from '../../src/app.js';
 
 const uniqueEmail = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
 
-type User = { id: string; token: string };
+/** Extract the `gifty_access` value from a supertest Set-Cookie header. */
+function accessCookie(setCookieHeader: unknown): string {
+  const arr = Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : [];
+  for (const c of arr) {
+    const s = String(c);
+    if (s.startsWith('gifty_access=')) {
+      return s.split(';')[0].slice('gifty_access='.length);
+    }
+  }
+  throw new Error('no gifty_access cookie in response');
+}
+
+type User = { id: string; email: string; access: string };
 
 async function register(app: any, prefix: string, displayName: string): Promise<User> {
+  const email = uniqueEmail(prefix);
   const res = await request(app)
     .post('/auth/register')
-    .send({ email: uniqueEmail(prefix), password: 'Password123!', displayName });
-  return { id: res.body.user.id, token: res.body.token };
+    .send({ email, password: 'Password123!', displayName });
+  return { id: res.body.user.id, email, access: accessCookie(res.headers['set-cookie']) };
 }
 
 beforeEach(async () => {
@@ -23,7 +36,7 @@ beforeEach(async () => {
 });
 
 describe('API contract: authentication', () => {
-  it('POST /auth/register returns 201 with user and token', async () => {
+  it('POST /auth/register returns 201 with user and session cookie', async () => {
     const app = await createApp();
     const res = await request(app)
       .post('/auth/register')
@@ -33,7 +46,8 @@ describe('API contract: authentication', () => {
     expect(res.body.user).toHaveProperty('id');
     expect(res.body.user).toHaveProperty('email');
     expect(res.body.user).toHaveProperty('displayName');
-    expect(res.body.token).toBeTruthy();
+    expect(res.body.token).toBeUndefined();
+    expect(accessCookie(res.headers['set-cookie'])).toBeTruthy();
   });
 
   it('POST /auth/register rejects duplicate email with 409', async () => {
@@ -44,13 +58,14 @@ describe('API contract: authentication', () => {
     expect(res.status).toBe(409);
   });
 
-  it('POST /auth/login returns 200 with token for valid credentials', async () => {
+  it('POST /auth/login returns 200 with session cookie for valid credentials', async () => {
     const app = await createApp();
     const email = uniqueEmail('login');
     await request(app).post('/auth/register').send({ email, password: 'Password123!', displayName: 'Login User' });
     const res = await request(app).post('/auth/login').send({ email, password: 'Password123!' });
     expect(res.status).toBe(200);
-    expect(res.body.token).toBeTruthy();
+    expect(res.body.token).toBeUndefined();
+    expect(accessCookie(res.headers['set-cookie'])).toBeTruthy();
   });
 
   it('POST /auth/login rejects invalid credentials with 401', async () => {
@@ -68,7 +83,7 @@ describe('API contract: gift lists', () => {
     const owner = await register(app, 'list-owner', 'Owner');
     const res = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
       .send({ title: 'Contract List' });
 
     expect(res.status).toBe(201);
@@ -81,7 +96,7 @@ describe('API contract: gift lists', () => {
     const owner = await register(app, 'list-bad', 'Owner');
     const res = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
       .send({});
     expect(res.status).toBe(400);
   });
@@ -89,8 +104,8 @@ describe('API contract: gift lists', () => {
   it('GET /lists returns 200 with lists array', async () => {
     const app = await createApp();
     const owner = await register(app, 'list-get', 'Owner');
-    await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'A' });
-    const res = await request(app).get('/lists').set('Authorization', `Bearer ${owner.token}`);
+    await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'A' });
+    const res = await request(app).get('/lists').set('Cookie', `gifty_access=${owner.access}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.lists)).toBe(true);
     expect(res.body.lists.length).toBe(1);
@@ -99,8 +114,8 @@ describe('API contract: gift lists', () => {
   it('GET /lists/:listId returns 200 with list and items', async () => {
     const app = await createApp();
     const owner = await register(app, 'list-detail', 'Owner');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Detail' });
-    const res = await request(app).get(`/lists/${listRes.body.list.id}`).set('Authorization', `Bearer ${owner.token}`);
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Detail' });
+    const res = await request(app).get(`/lists/${listRes.body.list.id}`).set('Cookie', `gifty_access=${owner.access}`);
     expect(res.status).toBe(200);
     expect(res.body.list).toHaveProperty('id');
     expect(res.body.list).toHaveProperty('items');
@@ -110,19 +125,19 @@ describe('API contract: gift lists', () => {
     const app = await createApp();
     const owner = await register(app, 'list-403', 'Owner');
     const outsider = await register(app, 'list-403-out', 'Outsider');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Private' });
-    const res = await request(app).get(`/lists/${listRes.body.list.id}`).set('Authorization', `Bearer ${outsider.token}`);
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Private' });
+    const res = await request(app).get(`/lists/${listRes.body.list.id}`).set('Cookie', `gifty_access=${outsider.access}`);
     expect(res.status).toBe(403);
   });
 
   it('DELETE /lists/:listId returns 200 and removes the list', async () => {
     const app = await createApp();
     const owner = await register(app, 'list-del', 'Owner');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Delete Me' });
-    const del = await request(app).delete(`/lists/${listRes.body.list.id}`).set('Authorization', `Bearer ${owner.token}`);
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Delete Me' });
+    const del = await request(app).delete(`/lists/${listRes.body.list.id}`).set('Cookie', `gifty_access=${owner.access}`);
     expect(del.status).toBe(200);
     // After deletion, the list no longer appears in the owner's dashboard
-    const dashboard = await request(app).get('/lists').set('Authorization', `Bearer ${owner.token}`);
+    const dashboard = await request(app).get('/lists').set('Cookie', `gifty_access=${owner.access}`);
     expect(dashboard.body.lists.some((l: any) => l.id === listRes.body.list.id)).toBe(false);
   });
 });
@@ -132,11 +147,11 @@ describe('API contract: sharing', () => {
     const app = await createApp();
     const owner = await register(app, 'share-owner', 'Owner');
     const recipient = await register(app, 'share-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Share List' });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Share List' });
 
     const res = await request(app)
       .post(`/lists/${listRes.body.list.id}/share`)
-      .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
       .send({ recipientUserId: recipient.id, permission: 'shared' });
 
     expect(res.status).toBe(201);
@@ -147,10 +162,10 @@ describe('API contract: sharing', () => {
   it('POST /lists/:listId/share rejects self-share with 400', async () => {
     const app = await createApp();
     const owner = await register(app, 'share-self', 'Owner');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Self Share' });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Self Share' });
     const res = await request(app)
       .post(`/lists/${listRes.body.list.id}/share`)
-      .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
       .send({ recipientUserId: owner.id, permission: 'shared' });
     expect(res.status).toBe(400);
   });
@@ -159,23 +174,30 @@ describe('API contract: sharing', () => {
     const app = await createApp();
     const owner = await register(app, 'perm-owner', 'Owner');
     const recipient = await register(app, 'perm-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Perm List' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: recipient.id, permission: 'shared' });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Perm List' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: recipient.id, permission: 'shared' });
 
-    const res = await request(app).get(`/lists/${listRes.body.list.id}/share-permissions`).set('Authorization', `Bearer ${owner.token}`);
+    const res = await request(app).get(`/lists/${listRes.body.list.id}/share-permissions`).set('Cookie', `gifty_access=${owner.access}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.permissions)).toBe(true);
-    expect(res.body.permissions[0]).toHaveProperty('recipientDisplayName');
+    // Uniform owner share view (T058/T060, FR-010/FR-021): a single
+    // `permissions` array (pending invitations included — no separate
+    // `pendingInvitations` array), the invite email as the owner's source of
+    // truth, and the recipient display name only after consent to reveal.
+    expect(res.body).not.toHaveProperty('pendingInvitations');
+    const entry = res.body.permissions[0];
+    expect(entry.recipientEmail).toBe(recipient.email);
+    expect(entry.recipientDisplayName ?? null).toBeNull();
   });
 
   it('DELETE /lists/:listId/share/:permissionId returns 204', async () => {
     const app = await createApp();
     const owner = await register(app, 'revoke-owner', 'Owner');
     const recipient = await register(app, 'revoke-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Revoke List' });
-    const shareRes = await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: recipient.id, permission: 'shared' });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Revoke List' });
+    const shareRes = await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: recipient.id, permission: 'shared' });
 
-    const res = await request(app).delete(`/lists/${listRes.body.list.id}/share/${shareRes.body.sharePermission.id}`).set('Authorization', `Bearer ${owner.token}`);
+    const res = await request(app).delete(`/lists/${listRes.body.list.id}/share/${shareRes.body.sharePermission.id}`).set('Cookie', `gifty_access=${owner.access}`);
     expect(res.status).toBe(204);
   });
 });
@@ -184,11 +206,11 @@ describe('API contract: gift items', () => {
   it('POST /lists/:listId/items returns 201 with item in available state', async () => {
     const app = await createApp();
     const owner = await register(app, 'item-owner', 'Owner');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Item List' });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Item List' });
 
     const res = await request(app)
       .post(`/lists/${listRes.body.list.id}/items`)
-      .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
       .send({ name: 'Headphones', quantity: 1 });
 
     expect(res.status).toBe(201);
@@ -199,10 +221,10 @@ describe('API contract: gift items', () => {
   it('POST /lists/:listId/items rejects missing name with 400', async () => {
     const app = await createApp();
     const owner = await register(app, 'item-bad', 'Owner');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Bad Item' });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Bad Item' });
     const res = await request(app)
       .post(`/lists/${listRes.body.list.id}/items`)
-      .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
       .send({ quantity: 1 });
     expect(res.status).toBe(400);
   });
@@ -210,20 +232,20 @@ describe('API contract: gift items', () => {
   it('PATCH /items/:itemId returns 403 (immutable)', async () => {
     const app = await createApp();
     const owner = await register(app, 'immut-owner', 'Owner');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Immut List' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'Locked', quantity: 1 });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Immut List' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'Locked', quantity: 1 });
 
-    const res = await request(app).patch(`/items/${itemRes.body.item.id}`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'Changed' });
+    const res = await request(app).patch(`/items/${itemRes.body.item.id}`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'Changed' });
     expect(res.status).toBe(403);
   });
 
   it('DELETE /items/:itemId returns 403 (immutable)', async () => {
     const app = await createApp();
     const owner = await register(app, 'immut-del', 'Owner');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Immut Del' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'Locked', quantity: 1 });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Immut Del' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'Locked', quantity: 1 });
 
-    const res = await request(app).delete(`/items/${itemRes.body.item.id}`).set('Authorization', `Bearer ${owner.token}`);
+    const res = await request(app).delete(`/items/${itemRes.body.item.id}`).set('Cookie', `gifty_access=${owner.access}`);
     expect(res.status).toBe(403);
   });
 });
@@ -233,11 +255,11 @@ describe('API contract: item lifecycle', () => {
     const app = await createApp();
     const owner = await register(app, 'lc-owner', 'Owner');
     const recipient = await register(app, 'lc-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'LC List' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: recipient.id, permission: 'shared' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'LC Item', quantity: 1 });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'LC List' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: recipient.id, permission: 'shared' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'LC Item', quantity: 1 });
 
-    const res = await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Authorization', `Bearer ${recipient.token}`).send({ claimantUserId: recipient.id });
+    const res = await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Cookie', `gifty_access=${recipient.access}`).send({ claimantUserId: recipient.id });
     expect(res.status).toBe(200);
     expect(res.body.item.state).toBe('claimed');
   });
@@ -247,13 +269,13 @@ describe('API contract: item lifecycle', () => {
     const owner = await register(app, 'lc-dup-owner', 'Owner');
     const r1 = await register(app, 'lc-dup-r1', 'R1');
     const r2 = await register(app, 'lc-dup-r2', 'R2');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'LC Dup' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: r1.id, permission: 'shared' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: r2.id, permission: 'shared' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'LC Dup Item', quantity: 1 });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'LC Dup' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: r1.id, permission: 'shared' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: r2.id, permission: 'shared' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'LC Dup Item', quantity: 1 });
 
-    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Authorization', `Bearer ${r1.token}`).send({ claimantUserId: r1.id });
-    const res = await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Authorization', `Bearer ${r2.token}`).send({ claimantUserId: r2.id });
+    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Cookie', `gifty_access=${r1.access}`).send({ claimantUserId: r1.id });
+    const res = await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Cookie', `gifty_access=${r2.access}`).send({ claimantUserId: r2.id });
     expect(res.status).toBe(409);
   });
 
@@ -261,12 +283,12 @@ describe('API contract: item lifecycle', () => {
     const app = await createApp();
     const owner = await register(app, 'lc-p-owner', 'Owner');
     const recipient = await register(app, 'lc-p-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'LC P' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: recipient.id, permission: 'shared' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'LC P Item', quantity: 1 });
-    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Authorization', `Bearer ${recipient.token}`).send({ claimantUserId: recipient.id });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'LC P' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: recipient.id, permission: 'shared' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'LC P Item', quantity: 1 });
+    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Cookie', `gifty_access=${recipient.access}`).send({ claimantUserId: recipient.id });
 
-    const res = await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Authorization', `Bearer ${recipient.token}`);
+    const res = await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Cookie', `gifty_access=${recipient.access}`);
     expect(res.status).toBe(200);
     expect(res.body.item.state).toBe('purchased');
   });
@@ -275,11 +297,11 @@ describe('API contract: item lifecycle', () => {
     const app = await createApp();
     const owner = await register(app, 'lc-pb-owner', 'Owner');
     const recipient = await register(app, 'lc-pb-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'LC PB' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: recipient.id, permission: 'shared' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'LC PB Item', quantity: 1 });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'LC PB' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: recipient.id, permission: 'shared' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'LC PB Item', quantity: 1 });
 
-    const res = await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Authorization', `Bearer ${recipient.token}`);
+    const res = await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Cookie', `gifty_access=${recipient.access}`);
     expect(res.status).toBe(409);
   });
 
@@ -287,12 +309,12 @@ describe('API contract: item lifecycle', () => {
     const app = await createApp();
     const owner = await register(app, 'lc-u-owner', 'Owner');
     const recipient = await register(app, 'lc-u-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'LC U' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: recipient.id, permission: 'shared' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'LC U Item', quantity: 1 });
-    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Authorization', `Bearer ${recipient.token}`).send({ claimantUserId: recipient.id });
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'LC U' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: recipient.id, permission: 'shared' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'LC U Item', quantity: 1 });
+    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Cookie', `gifty_access=${recipient.access}`).send({ claimantUserId: recipient.id });
 
-    const res = await request(app).post(`/items/${itemRes.body.item.id}/unclaim`).set('Authorization', `Bearer ${recipient.token}`);
+    const res = await request(app).post(`/items/${itemRes.body.item.id}/unclaim`).set('Cookie', `gifty_access=${recipient.access}`);
     expect(res.status).toBe(200);
     expect(res.body.item.state).toBe('available');
   });
@@ -301,13 +323,13 @@ describe('API contract: item lifecycle', () => {
     const app = await createApp();
     const owner = await register(app, 'lc-up-owner', 'Owner');
     const recipient = await register(app, 'lc-up-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'LC UP' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: recipient.id, permission: 'shared' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'LC UP Item', quantity: 1 });
-    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Authorization', `Bearer ${recipient.token}`).send({ claimantUserId: recipient.id });
-    await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Authorization', `Bearer ${recipient.token}`);
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'LC UP' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: recipient.id, permission: 'shared' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'LC UP Item', quantity: 1 });
+    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Cookie', `gifty_access=${recipient.access}`).send({ claimantUserId: recipient.id });
+    await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Cookie', `gifty_access=${recipient.access}`);
 
-    const res = await request(app).post(`/items/${itemRes.body.item.id}/unpurchase`).set('Authorization', `Bearer ${recipient.token}`);
+    const res = await request(app).post(`/items/${itemRes.body.item.id}/unpurchase`).set('Cookie', `gifty_access=${recipient.access}`);
     expect(res.status).toBe(200);
     expect(res.body.item.state).toBe('claimed');
   });
@@ -318,13 +340,13 @@ describe('API contract: privacy boundary', () => {
     const app = await createApp();
     const owner = await register(app, 'priv-owner', 'Owner');
     const recipient = await register(app, 'priv-recipient', 'Recipient');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Priv List' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: recipient.id, permission: 'shared' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'Priv Item', quantity: 1 });
-    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Authorization', `Bearer ${recipient.token}`).send({ claimantUserId: recipient.id });
-    await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Authorization', `Bearer ${recipient.token}`);
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Priv List' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: recipient.id, permission: 'shared' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'Priv Item', quantity: 1 });
+    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Cookie', `gifty_access=${recipient.access}`).send({ claimantUserId: recipient.id });
+    await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Cookie', `gifty_access=${recipient.access}`);
 
-    const ownerView = await request(app).get(`/lists/${listRes.body.list.id}`).set('Authorization', `Bearer ${owner.token}`);
+    const ownerView = await request(app).get(`/lists/${listRes.body.list.id}`).set('Cookie', `gifty_access=${owner.access}`);
     const item = ownerView.body.list.items.find((i: any) => i.id === itemRes.body.item.id);
     expect(item.state).toBe('available');
     expect(item.claimantUserId).toBeUndefined();
@@ -335,14 +357,14 @@ describe('API contract: privacy boundary', () => {
     const owner = await register(app, 'priv2-owner', 'Owner');
     const r1 = await register(app, 'priv2-r1', 'R1');
     const r2 = await register(app, 'priv2-r2', 'R2');
-    const listRes = await request(app).post('/lists').set('Authorization', `Bearer ${owner.token}`).send({ title: 'Priv2 List' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: r1.id, permission: 'shared' });
-    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Authorization', `Bearer ${owner.token}`).send({ recipientUserId: r2.id, permission: 'shared' });
-    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Authorization', `Bearer ${owner.token}`).send({ name: 'Priv2 Item', quantity: 1 });
-    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Authorization', `Bearer ${r1.token}`).send({ claimantUserId: r1.id });
-    await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Authorization', `Bearer ${r1.token}`);
+    const listRes = await request(app).post('/lists').set('Cookie', `gifty_access=${owner.access}`).send({ title: 'Priv2 List' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: r1.id, permission: 'shared' });
+    await request(app).post(`/lists/${listRes.body.list.id}/share`).set('Cookie', `gifty_access=${owner.access}`).send({ recipientUserId: r2.id, permission: 'shared' });
+    const itemRes = await request(app).post(`/lists/${listRes.body.list.id}/items`).set('Cookie', `gifty_access=${owner.access}`).send({ name: 'Priv2 Item', quantity: 1 });
+    await request(app).post(`/items/${itemRes.body.item.id}/claim`).set('Cookie', `gifty_access=${r1.access}`).send({ claimantUserId: r1.id });
+    await request(app).post(`/items/${itemRes.body.item.id}/purchase`).set('Cookie', `gifty_access=${r1.access}`);
 
-    const r2View = await request(app).get(`/lists/${listRes.body.list.id}`).set('Authorization', `Bearer ${r2.token}`);
+    const r2View = await request(app).get(`/lists/${listRes.body.list.id}`).set('Cookie', `gifty_access=${r2.access}`);
     const item = r2View.body.list.items.find((i: any) => i.id === itemRes.body.item.id);
     expect(item.state).toBe('purchased');
     expect(item.claimantUserId).toBe(r1.id);

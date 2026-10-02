@@ -1,12 +1,15 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createAuthRouter } from './auth/router.js';
+import { createAuthRouter, clearAccessCookie, clearRefreshCookie } from './auth/router.js';
 import { createListRouter } from './gift-lists/router.js';
 import { createItemRouter } from './gift-items/router.js';
-import { validateConfig } from './config/index.js';
+import { requireAuth, type AuthenticatedRequest } from './auth/middleware.js';
+import { clientIp } from './auth/rate-limit.js';
+import { removeAccount } from './account/removal.js';
+import { loadConfig, validateConfig } from './config/index.js';
 import { errorHandler } from './common/errors.js';
 
 function requestLogger(req: Request, res: Response, next: NextFunction) {
@@ -19,23 +22,75 @@ function requestLogger(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-function securityHeaders(req: Request, res: Response, next: NextFunction) {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  next();
+function securityHeaders(config: ReturnType<typeof loadConfig>) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // FR-004: content/scripts/styles confined to self + the permitted font source.
+    // The app loads its fonts as a <link rel=stylesheet> from the font origin,
+    // so that origin is allowed in both style-src (the stylesheet) and
+    // font-src (the woff2 binaries). script-src stays locked to self.
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; " +
+        `style-src 'self' 'unsafe-inline' ${config.cspFontOrigin}; ` +
+        `font-src 'self' ${config.cspFontOrigin}; ` +
+        "img-src 'self' data:; connect-src 'self'",
+    );
+    // FR-012 / US2: HSTS is a production-only directive (edge TLS assumed).
+    if (config.isProduction) {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  };
+}
+
+/**
+ * CORS policy (FR-003, research D11):
+ *   - production: closed by default — no origin is reflected unless the caller
+ *     is in `CORS_ORIGINS`; a listed origin is opened exactly (not to all others),
+ *     with `Access-Control-Allow-Credentials: true` (cookies require it).
+ *   - development: permissive (reflect the caller origin) so the Vite dev flow
+ *     and cross-origin dev tooling keep working.
+ */
+function corsOptions(config: ReturnType<typeof loadConfig>): CorsOptions {
+  if (config.isProduction) {
+    if (config.corsOrigins && config.corsOrigins.length > 0) {
+      // Allowlist mode (FR-003): reflect only the listed origins, deny all others.
+      // The origin callback returns the origin string (not an object) so the
+      // cors package's configureOrigin reflects it correctly; `credentials` is
+      // a top-level option so configureCredentials emits the header only when
+      // cors() actually runs (i.e. the origin was permitted).
+      const allowlist = config.corsOrigins;
+      return {
+        origin: (origin, callback) => {
+          if (!origin) return callback(null, false);
+          if (allowlist.includes(origin)) return callback(null, origin);
+          return callback(null, false);
+        },
+        credentials: true,
+      };
+    }
+    // Closed by default: no origin is reflected (FR-003, research D11).
+    return { origin: false };
+  }
+  // Development: permissive default for the Vite dev flow — reflect the caller origin.
+  return { origin: true, credentials: true };
 }
 
 export async function createApp(): Promise<Express> {
   validateConfig();
+  const config = loadConfig();
 
   const app = express();
+  // FR-012 / US2: never advertise the framework.
+  app.disable('x-powered-by');
 
-  // CORS: restrict to configured origins in production; allow all in development.
-  const corsOrigins = process.env.CORS_ORIGINS?.split(',').map((s) => s.trim());
-  app.use(cors(corsOrigins ? { origin: corsOrigins } : {}));
+  // CORS closed by default in production; permissive in development (FR-003).
+  app.use(cors(corsOptions(config)));
 
-  app.use(securityHeaders);
+  app.use(securityHeaders(config));
   app.use(requestLogger);
   app.use(express.json({ limit: '1mb' }));
 
@@ -45,9 +100,57 @@ export async function createApp(): Promise<Express> {
     res.status(200).json({ status: 'ok' });
   });
 
+  // Test-only probe (FR-011 / US6): registered ONLY when `GIFTY_ENABLE_TEST_PROBES`
+  // is set, so it never exists in a normal app. It throws a realistic
+  // server-side failure (a database-initialization error) so the production
+  // error handler's 5xx collapse can be exercised end-to-end — proving the
+  // raw message (which names a driver and carries a stack) is never echoed.
+  if (process.env.GIFTY_ENABLE_TEST_PROBES === '1') {
+    app.post('/__test/internal-error', (_req: Request, _res: Response) => {
+      const failure = new Error(
+        'Simulated internal failure: DB connection pool exhausted (ECONNREFUSED) at /srv/gifty/src/db.js:42'
+      );
+      failure.name = 'PrismaClientInitializationError';
+      throw failure;
+    });
+  }
+
   app.use('/auth', createAuthRouter());
   app.use('/lists', createListRouter());
   app.use('/', createItemRouter());
+
+  // GET /account — the caller's own profile (feature 003 contract). Now
+  // cookie-authenticated; this is the endpoint the client uses to bootstrap
+  // its session from the HttpOnly `gifty_access` cookie (US4 / T027).
+  app.get(
+    '/account',
+    requireAuth,
+    (req: AuthenticatedRequest, res: Response) => {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ message: 'Authentication required' });
+        return;
+      }
+      res.status(200).json({
+        user: { id: user.id, email: user.email, displayName: user.displayName },
+      });
+    },
+  );
+
+  // DELETE /account — irreversible account removal (feature 003, US7, FR-014 /
+  // FR-028). Requires a live session (401 otherwise). On success: 204 and both
+  // session cookies are cleared; the user row, owned lists, recipient-side
+  // permissions, sessions, and pending invitations are removed atomically, and
+  // the user's claims on others' items are reverted (T048, research D12).
+  app.delete('/account', requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      await removeAccount(req.user!.id, clientIp(req));
+      res.set('Set-Cookie', [clearAccessCookie(), clearRefreshCookie()]);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
 
   // Production static serving (research D2/D12): when running with
   // NODE_ENV=production and a frontend build is present, serve the SPA

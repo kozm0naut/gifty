@@ -167,6 +167,22 @@ textarea {
 .app-nav {
   display: flex;
   align-items: center;
+  gap: 0.75rem;
+}
+
+.nav-link {
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-decoration: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.nav-link:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-user-cluster {
@@ -335,6 +351,29 @@ h1 {
 .btn-ghost:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.07);
   color: var(--color-text);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent-hover);
+  color: var(--color-accent-hover);
+}
+
+.consent-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .consent-actions {
+    flex-direction: column;
+  }
 }
 
 /* ---- Backlink ---- */
@@ -882,6 +921,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin-left: 0.3rem;
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 50%;
@@ -1238,6 +1278,33 @@ h1 {
   font-size: 0.7rem;
 }
 
+/* ---- Mobile: stack name / email / action on separate lines ---- */
+@media (max-width: 640px) {
+  .recipient-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+    padding: 0.75rem 0;
+  }
+
+  /* Allow the email to drop onto its own line under the name. */
+  .recipient-name {
+    flex-wrap: wrap;
+    row-gap: 0.15rem;
+  }
+
+  .recipient-name .recipient-email {
+    flex-basis: 100%;
+    width: 100%;
+    align-self: flex-start;
+  }
+
+  /* Full-width, easy-to-tap action below the text. */
+  .recipient-row > .btn {
+    align-self: stretch;
+  }
+}
+
 /* ---- Auth ---- */
 .auth-card {
   max-width: 400px;
@@ -1428,4 +1495,63 @@ h1 {
 
 .deleted-title {
   margin-bottom: 0.5rem;
+}
+
+/* ---- Account (US7) ---- */
+.account-page {
+  max-width: 720px;
+}
+
+.account-profile {
+  margin-bottom: 1.5rem;
+}
+
+.account-fields {
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.account-field {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.account-field dt {
+  min-width: 7rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.account-field dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.account-danger {
+  border-left: 3px solid var(--color-danger);
+}
+
+.account-danger-desc {
+  margin: 0 0 1rem;
+}
+
+.account-confirm p {
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+
+.account-confirm-list {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+  line-height: 1.6;
+}
+
+.account-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
 }

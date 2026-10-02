@@ -8,6 +8,7 @@ import {
   apiClaimItem,
   loginViaUI,
   logoutViaUI,
+  dismissConsentPromptIfPresent,
   uniqueEmail,
 } from './helpers';
 
@@ -21,18 +22,21 @@ test.describe('T044: Persistence across sessions', () => {
     const recipient = await apiRegister(recipientEmail, E2E_PASSWORD, 'E2E Recipient');
 
     // Owner creates a list with 1 item
-    const { list } = await apiCreateList(owner.token, {
+    const { list } = await apiCreateList(owner.cookie, {
       title: 'E2E Persistence List',
     });
-    const item = (await apiCreateItem(owner.token, list.id, { name: 'Sneakers' })).item;
+    const item = (await apiCreateItem(owner.cookie, list.id, { name: 'Sneakers' })).item;
 
     // Owner shares the list with the recipient
-    await apiShareList(owner.token, list.id, recipientEmail);
+    await apiShareList(owner.cookie, list.id, recipientEmail);
 
     // Recipient logs in via UI and claims the item
     await loginViaUI(page, recipientEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     await page.waitForSelector('text=Sneakers');
+
+    // US5: acknowledge the one-time name-disclosure prompt before interacting.
+    await dismissConsentPromptIfPresent(page);
 
     const card = page.locator('.card', { hasText: 'Sneakers' });
     await card.locator('button', { hasText: 'Claim' }).click();
@@ -62,16 +66,16 @@ test.describe('T044: Persistence across sessions', () => {
     const recipient = await apiRegister(recipientEmail, E2E_PASSWORD, 'E2E Recipient');
 
     // Owner creates a list with 1 item
-    const { list } = await apiCreateList(owner.token, {
+    const { list } = await apiCreateList(owner.cookie, {
       title: 'E2E Persistence List',
     });
-    const item = (await apiCreateItem(owner.token, list.id, { name: 'Cookbook' })).item;
+    const item = (await apiCreateItem(owner.cookie, list.id, { name: 'Cookbook' })).item;
 
     // Owner shares the list with the recipient
-    await apiShareList(owner.token, list.id, recipientEmail);
+    await apiShareList(owner.cookie, list.id, recipientEmail);
 
     // Recipient claims the item via API
-    await apiClaimItem(recipient.token, item.id);
+    await apiClaimItem(recipient.cookie, item.id);
 
     // Owner logs in via UI and sees no state
     await loginViaUI(page, ownerEmail, E2E_PASSWORD);

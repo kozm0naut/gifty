@@ -1,6 +1,24 @@
-const AUTH_TOKEN_KEY = 'gift-list-token';
-const USER_KEY = 'gift-list-user';
 export const SESSION_EXPIRED_EVENT = 'gift-list:session-expired';
+
+/** Detail payload of SESSION_EXPIRED_EVENT (FR-027). */
+export interface SessionExpiredDetail {
+  message: string;
+  /** True when the termination was triggered by refresh-token reuse (theft signal, FR-026). */
+  security?: boolean;
+}
+
+/** Plain notice: session expired or revoked — no theft signal (FR-027). */
+export const SESSION_EXPIRED_MESSAGE = 'Your session has expired. Please log in again.';
+
+/** Security notice: refresh-token reuse detected — recommend a password change (FR-027). */
+export const SESSION_SECURITY_MESSAGE =
+  'Your session was ended for security reasons. For your safety, please change your password and sign in again.';
+
+export type AccountUser = {
+  id: string;
+  email: string;
+  displayName: string;
+};
 // API base URL. Defaults to same-origin (relative paths) so the containerized
 // single-origin deployment (SPA + API on one host/port) works without config;
 // set VITE_API_URL to point at a different API origin (e.g. dev on :4000).
@@ -45,35 +63,115 @@ export type DashboardList = GiftList & {
   items?: GiftItem[];
 };
 
+/** Name-disclosure consent state on a list (US5, FR-021–FR-024). */
+export type ConsentState = 'pending' | 'revealed' | 'declined';
+
+/**
+ * A row in the owner's uniform share view (Phase 12, FR-010/FR-021). Covers
+ * BOTH registered recipients (SharePermission) and unregistered invitees
+ * (PendingInvitation) — the response never distinguishes the two, and
+ * deliberately carries NO `consent` field (it would fingerprint registration
+ * status). `recipientDisplayName` is present ONLY when that recipient is
+ * registered and has consented to reveal; otherwise it is null (the owner
+ * sees the invite email only). `recipientUserId` is ABSENT on the owner's
+ * uniform view (it would fingerprint registration too) but present on the
+ * recipient-facing `/recipients` shape — hence optional.
+ */
 export type SharePermission = {
   id: string;
-  recipientUserId: string;
-  recipientDisplayName: string;
+  /** Present only in the recipient-facing `/recipients` shape. */
+  recipientUserId?: string | null;
+  /** Display name — only when the recipient consented to reveal. */
+  recipientDisplayName: string | null;
   permission: 'shared';
+  /** Invite email — the owner's source of truth for every entry. */
+  recipientEmail?: string | null;
 };
 
-function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+// Session termination (FR-027): the session was ended — either expired,
+// revoked by the user elsewhere, or by refresh-token reuse (theft signal).
+// `security` drives the stronger FR-027 notice on the sign-in page.
+function dispatchSessionExpired(detail: SessionExpiredDetail): void {
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail }));
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
+// Single-flight guard: concurrent 401s must trigger exactly one refresh.
+let refreshPromise: Promise<Response> | null = null;
+
+// Transparent session refresh (T028): try POST /auth/refresh ONCE. The
+// server rotates the refresh cookie and issues a new access cookie; the
+// browser stores both automatically (HttpOnly — never read here).
+function refreshOnce(): Promise<Response> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    }).finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+// Authenticated request wrapper (T028): the browser sends the HttpOnly
+// gifty_access cookie automatically (same-origin). On 401 we attempt ONE
+// refresh, then retry the original request exactly once. If the refresh
+// fails we surface the FR-027 notice:
+//   - reason "stale_refresh"  → theft signal → security notice
+//   - "expired" / "revoked"   → plain expiry notice
+async function handleResponse<T>(response: Response, retry?: () => Promise<Response>): Promise<T> {
+  if (!response.ok && response.status === 401 && retry) {
+    const refreshed = await refreshOnce().catch(() => null);
+    if (refreshed?.ok) {
+      const retried = await retry();
+      if (retried.ok) {
+        const data = await retried.json().catch(() => ({}));
+        return data as T;
+      }
+      return handleResponse(retried);
+    }
+    let reason: string | undefined;
+    try {
+      reason = (await refreshed?.json().catch(() => ({}))).reason;
+    } catch {
+      /* no body — fall through to the plain notice */
+    }
+    dispatchSessionExpired(
+      reason === 'stale_refresh'
+        ? { message: SESSION_SECURITY_MESSAGE, security: true }
+        : { message: SESSION_EXPIRED_MESSAGE },
+    );
+    throw new Error(reason === 'stale_refresh' ? SESSION_SECURITY_MESSAGE : SESSION_EXPIRED_MESSAGE);
+  }
+
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401) {
-      // The stored session is no longer valid — clear it so the app
-      // redirects to the auth page instead of showing a broken dashboard.
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-      const message = data.message || 'Your session has expired. Please log in again.';
-      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { message } }));
-    }
     throw new Error(data.message || 'API request failed');
   }
   return data;
+}
+
+/**
+ * Authenticated JSON request (T028). The session credential is the HttpOnly
+ * `gifty_access` cookie, sent automatically by the browser (same-origin);
+ * we never read, store, or log it. `body`, when present, is JSON-encoded.
+ */
+async function apiFetch<T>(
+  path: string,
+  options: { method?: string; body?: unknown } = {},
+): Promise<T> {
+  const method = options.method ?? 'GET';
+  const doFetch = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method,
+      credentials: 'include',
+      headers: options.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+  const response = await doFetch();
+  // 204 No Content (e.g. DELETE share permission) — no body to parse.
+  if (response.status === 204) return undefined as T;
+  return handleResponse<T>(response, doFetch);
 }
 
 // Auth endpoints (login/register) are unauthenticated by definition, so a 401
@@ -92,6 +190,7 @@ export async function register(payload: AuthPayload) {
   const response = await fetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(payload),
   });
   return handleAuthResponse<any>(response);
@@ -101,24 +200,69 @@ export async function login(payload: AuthPayload) {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(payload),
   });
   return handleAuthResponse<any>(response);
 }
 
-export async function fetchLists(): Promise<DashboardList[]> {
-  const response = await fetch(`${API_BASE_URL}/lists`, {
-    headers: getAuthHeaders(),
+/**
+ * Bootstrap the session from the HttpOnly `gifty_access` cookie (T027).
+ * 200 → `{ user }`; 401 → no active session.
+ */
+export async function fetchAccount(): Promise<AccountUser> {
+  const response = await fetch(`${API_BASE_URL}/account`, {
+    credentials: 'include',
   });
-  const data = await handleResponse<{ lists: DashboardList[] }>(response);
+  if (response.status === 401) {
+    throw new Error('no active session');
+  }
+  const data = await handleResponse<{ user: AccountUser }>(response);
+  if (!data?.user) {
+    throw new Error('no active session');
+  }
+  return data.user;
+}
+
+/**
+ * Sign out (FR-008): the server revokes the session family and clears both
+ * cookies. A 401 here simply means the session was already gone — treat as
+ * success so the UI can always complete a clean sign-out.
+ */
+export async function logoutSession(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (response.status !== 204 && response.status !== 401) {
+    throw new Error('Failed to sign out');
+  }
+}
+
+/**
+ * Remove the account (feature 003, US7, FR-014 / FR-028). Irreversible: the
+ * server atomically deletes the user, their owned lists, recipient-side
+ * permissions, sessions, and pending invitations, and reverts their claims on
+ * others' items. Both session cookies are cleared. 204 on success; 401 if the
+ * session is already gone.
+ */
+export async function deleteAccount(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/account`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (response.status !== 204 && response.status !== 401) {
+    throw new Error('Failed to remove account');
+  }
+}
+
+export async function fetchLists(): Promise<DashboardList[]> {
+  const data = await apiFetch<{ lists: DashboardList[] }>('/lists');
   return data.lists ?? [];
 }
 
 export async function fetchListById(listId: string): Promise<DashboardList> {
-  const response = await fetch(`${API_BASE_URL}/lists/${listId}`, {
-    headers: getAuthHeaders(),
-  });
-  const data = await handleResponse<{ list: DashboardList }>(response);
+  const data = await apiFetch<{ list: DashboardList }>(`/lists/${listId}`);
   return data.list;
 }
 
@@ -128,111 +272,94 @@ export async function fetchListById(listId: string): Promise<DashboardList> {
  * so the avatar stack can be rendered in both views.
  */
 export async function fetchListRecipients(listId: string): Promise<SharePermission[]> {
-  const response = await fetch(`${API_BASE_URL}/lists/${listId}/recipients`, {
-    headers: getAuthHeaders(),
-  });
-  const data = await handleResponse<{ recipients: SharePermission[] }>(response);
+  const data = await apiFetch<{ recipients: SharePermission[] }>(`/lists/${listId}/recipients`);
   return data.recipients ?? [];
 }
 
 export async function createList(payload: { title: string; description?: string }): Promise<DashboardList> {
-  const response = await fetch(`${API_BASE_URL}/lists`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
-  const data = await handleResponse<{ list: DashboardList }>(response);
+  const data = await apiFetch<{ list: DashboardList }>('/lists', { method: 'POST', body: payload });
   return data.list;
 }
 
 export async function shareList(listId: string, payload: { recipientUserId?: string; recipientEmail?: string; permission: 'shared' }) {
-  const response = await fetch(`${API_BASE_URL}/lists/${listId}/share`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
-  const data = await handleResponse<any>(response);
+  const data = await apiFetch<any>(`/lists/${listId}/share`, { method: 'POST', body: payload });
   return data.sharePermission;
 }
 
 export async function updateList(listId: string, payload: { title: string; description?: string | null }): Promise<DashboardList> {
-  const response = await fetch(`${API_BASE_URL}/lists/${listId}`, {
-    method: 'PATCH',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
-  const data = await handleResponse<{ list: DashboardList }>(response);
+  const data = await apiFetch<{ list: DashboardList }>(`/lists/${listId}`, { method: 'PATCH', body: payload });
   return data.list;
 }
 
-export async function deleteList(listId: string) {
-  const response = await fetch(`${API_BASE_URL}/lists/${listId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
-  return handleResponse<any>(response);
+export async function deleteList(listId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/lists/${listId}`, { method: 'DELETE' });
 }
 
-export async function createGiftItem(listId: string, payload: { name: string; description?: string; quantity?: number; unitPrice?: number }) {
-  const response = await fetch(`${API_BASE_URL}/lists/${listId}/items`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
-  const data = await handleResponse<{ item: GiftItem }>(response);
+export async function createGiftItem(listId: string, payload: { name: string; description?: string; quantity?: number; unitPrice?: number }): Promise<GiftItem> {
+  const data = await apiFetch<{ item: GiftItem }>(`/lists/${listId}/items`, { method: 'POST', body: payload });
   return data.item;
 }
 
-export async function claimGiftItem(itemId: string) {
-  const response = await fetch(`${API_BASE_URL}/items/${itemId}/claim`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
-  const data = await handleResponse<{ item: GiftItem }>(response);
+export async function claimGiftItem(itemId: string): Promise<GiftItem> {
+  const data = await apiFetch<{ item: GiftItem }>(`/items/${itemId}/claim`, { method: 'POST' });
   return data.item;
 }
 
-export async function purchaseGiftItem(itemId: string) {
-  const response = await fetch(`${API_BASE_URL}/items/${itemId}/purchase`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
-  const data = await handleResponse<{ item: GiftItem }>(response);
+export async function purchaseGiftItem(itemId: string): Promise<GiftItem> {
+  const data = await apiFetch<{ item: GiftItem }>(`/items/${itemId}/purchase`, { method: 'POST' });
   return data.item;
 }
 
-export async function unclaimGiftItem(itemId: string) {
-  const response = await fetch(`${API_BASE_URL}/items/${itemId}/unclaim`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
-  const data = await handleResponse<{ item: GiftItem }>(response);
+export async function unclaimGiftItem(itemId: string): Promise<GiftItem> {
+  const data = await apiFetch<{ item: GiftItem }>(`/items/${itemId}/unclaim`, { method: 'POST' });
   return data.item;
 }
 
-export async function unpurchaseGiftItem(itemId: string) {
-  const response = await fetch(`${API_BASE_URL}/items/${itemId}/unpurchase`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
-  const data = await handleResponse<{ item: GiftItem }>(response);
+export async function unpurchaseGiftItem(itemId: string): Promise<GiftItem> {
+  const data = await apiFetch<{ item: GiftItem }>(`/items/${itemId}/unpurchase`, { method: 'POST' });
   return data.item;
 }
 
+/**
+ * Owner-only: the list's uniform share entries (Phase 12, FR-010/FR-021).
+ * Registered recipients and unregistered invitees appear in the SAME array
+ * with no distinguishing fields; each entry carries the invite email and a
+ * display name only when that recipient consented to reveal.
+ */
 export async function fetchSharePermissions(listId: string): Promise<SharePermission[]> {
-  const response = await fetch(`${API_BASE_URL}/lists/${listId}/share-permissions`, {
-    headers: getAuthHeaders(),
-  });
-  const data = await handleResponse<{ permissions: SharePermission[] }>(response);
+  const data = await apiFetch<{ permissions: SharePermission[] }>(`/lists/${listId}/share-permissions`);
   return data.permissions ?? [];
 }
 
 export async function revokePermission(listId: string, permissionId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/lists/${listId}/share/${permissionId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
+  await apiFetch<unknown>(`/lists/${listId}/share/${permissionId}`, { method: 'DELETE' });
+}
+
+// ── US5: name-disclosure consent (FR-021–FR-024) ─────────────────────────────
+
+export type ConsentInfo = {
+  consent: ConsentState;
+  /** The caller's own display name (always visible to themselves). */
+  displayName: string;
+};
+
+/**
+ * Read the caller's consent state on a list. Recipient-only (the list owner
+ * gets a 403 — consent is not owner-queryable data).
+ */
+export async function fetchConsent(listId: string): Promise<ConsentInfo> {
+  const data = await apiFetch<ConsentInfo>(`/lists/${listId}/consent`);
+  return data;
+}
+
+/**
+ * Set the caller's consent to reveal or hide their display name on a list
+ * (FR-023). Idempotent and reversible at any time.
+ */
+export async function setConsent(listId: string, consent: ConsentState): Promise<{ consent: ConsentState }> {
+  const data = await apiFetch<{ consent: ConsentState }>(`/lists/${listId}/consent`, {
+    method: 'POST',
+    body: { consent },
   });
-  if (!response.ok) {
-    throw new Error('Failed to revoke permission');
-  }
+  return data;
 }

@@ -5,19 +5,31 @@ import { createApp } from '../src/app.js';
 
 const uniqueEmail = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
 
-type User = { id: string; token: string };
+/** Extract the `gifty_access` value from a supertest Set-Cookie header. */
+function accessCookie(setCookieHeader: unknown): string {
+  const arr = Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : [];
+  for (const c of arr) {
+    const s = String(c);
+    if (s.startsWith('gifty_access=')) {
+      return s.split(';')[0].slice('gifty_access='.length);
+    }
+  }
+  throw new Error('no gifty_access cookie in response');
+}
+
+type User = { id: string; access: string };
 
 async function register(app: any, prefix: string, displayName: string): Promise<User> {
   const res = await request(app)
     .post('/auth/register')
     .send({ email: uniqueEmail(prefix), password: 'Password123!', displayName });
-  return { id: res.body.user.id, token: res.body.token };
+  return { id: res.body.user.id, access: accessCookie(res.headers['set-cookie']) };
 }
 
 async function createList(app: any, owner: User, title: string) {
   const res = await request(app)
     .post('/lists')
-    .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
     .send({ title, description: 'Test list' });
   return res.body.list.id as string;
 }
@@ -25,14 +37,14 @@ async function createList(app: any, owner: User, title: string) {
 async function shareList(app: any, owner: User, listId: string, recipient: User) {
   return request(app)
     .post(`/lists/${listId}/share`)
-    .set('Authorization', `Bearer ${owner.token}`)
+    .set('Cookie', `gifty_access=${owner.access}`)
     .send({ recipientUserId: recipient.id, permission: 'shared' });
 }
 
 async function createItem(app: any, owner: User, listId: string, name: string) {
   const res = await request(app)
     .post(`/lists/${listId}/items`)
-    .set('Authorization', `Bearer ${owner.token}`)
+    .set('Cookie', `gifty_access=${owner.access}`)
     .send({ name, quantity: 1, description: 'Test item' });
   return res.body.item.id as string;
 }
@@ -40,14 +52,14 @@ async function createItem(app: any, owner: User, listId: string, name: string) {
 async function claimItem(app: any, recipient: User, itemId: string) {
   return request(app)
     .post(`/items/${itemId}/claim`)
-    .set('Authorization', `Bearer ${recipient.token}`)
+    .set('Cookie', `gifty_access=${recipient.access}`)
     .send({ claimantUserId: recipient.id });
 }
 
 async function purchaseItem(app: any, recipient: User, itemId: string) {
   return request(app)
     .post(`/items/${itemId}/purchase`)
-    .set('Authorization', `Bearer ${recipient.token}`);
+    .set('Cookie', `gifty_access=${recipient.access}`);
 }
 
 beforeEach(async () => {
@@ -176,7 +188,7 @@ describe('SC-005: Owner privacy boundary', () => {
 
     const ownerView = await request(app)
       .get(`/lists/${listId}`)
-      .set('Authorization', `Bearer ${owner.token}`);
+      .set('Cookie', `gifty_access=${owner.access}`);
 
     expect(ownerView.status).toBe(200);
     const item = ownerView.body.list.items.find((i: any) => i.id === itemId);
@@ -198,7 +210,7 @@ describe('SC-005: Owner privacy boundary', () => {
 
     const ownerView = await request(app)
       .get(`/lists/${listId}`)
-      .set('Authorization', `Bearer ${owner.token}`);
+      .set('Cookie', `gifty_access=${owner.access}`);
 
     expect(ownerView.status).toBe(200);
     const item = ownerView.body.list.items.find((i: any) => i.id === itemId);
@@ -221,7 +233,7 @@ describe('SC-005: Owner privacy boundary', () => {
     // The owner's dashboard must not leak claim/purchase state for their own list.
     const dashboard = await request(app)
       .get('/lists')
-      .set('Authorization', `Bearer ${owner.token}`);
+      .set('Cookie', `gifty_access=${owner.access}`);
 
     expect(dashboard.status).toBe(200);
     const list = dashboard.body.lists.find((l: any) => l.id === listId);
@@ -246,7 +258,7 @@ describe('SC-005: Owner privacy boundary', () => {
 
     const r2View = await request(app)
       .get(`/lists/${listId}`)
-      .set('Authorization', `Bearer ${r2.token}`);
+      .set('Cookie', `gifty_access=${r2.access}`);
 
     expect(r2View.status).toBe(200);
     const item = r2View.body.list.items.find((i: any) => i.id === itemId);
@@ -268,10 +280,18 @@ describe('SC-005: Owner privacy boundary', () => {
     await claimItem(app, r1, itemId);
     await purchaseItem(app, r1, itemId);
 
+    // US5 (FR-021/FR-024): the claimant's name is only visible to co-recipients
+    // after the claimant consents to name disclosure on this list.
+    const consentRes = await request(app)
+      .post(`/lists/${listId}/consent`)
+      .set('Cookie', `gifty_access=${r1.access}`)
+      .send({ consent: 'revealed' });
+    expect(consentRes.status).toBe(200);
+
     // Recipient view via GET /lists/:listId
     const listView = await request(app)
       .get(`/lists/${listId}`)
-      .set('Authorization', `Bearer ${r2.token}`);
+      .set('Cookie', `gifty_access=${r2.access}`);
     expect(listView.status).toBe(200);
     const listItem = listView.body.list.items.find((i: any) => i.id === itemId);
     expect(listItem.claimantDisplayName).toBe('Claimer One');
@@ -279,7 +299,7 @@ describe('SC-005: Owner privacy boundary', () => {
     // Recipient view via GET /lists/:listId/items
     const itemsView = await request(app)
       .get(`/lists/${listId}/items`)
-      .set('Authorization', `Bearer ${r2.token}`);
+      .set('Cookie', `gifty_access=${r2.access}`);
     expect(itemsView.status).toBe(200);
     const itemsItem = itemsView.body.items.find((i: any) => i.id === itemId);
     expect(itemsItem.claimantDisplayName).toBe('Claimer One');
@@ -287,7 +307,7 @@ describe('SC-005: Owner privacy boundary', () => {
     // Recipient view via GET /lists (dashboard)
     const dashView = await request(app)
       .get('/lists')
-      .set('Authorization', `Bearer ${r2.token}`);
+      .set('Cookie', `gifty_access=${r2.access}`);
     expect(dashView.status).toBe(200);
     const dashList = dashView.body.lists.find((l: any) => l.id === listId);
     const dashItem = dashList.items.find((i: any) => i.id === itemId);
@@ -296,7 +316,7 @@ describe('SC-005: Owner privacy boundary', () => {
     // Owner view must NOT expose identity (owner-privacy boundary preserved)
     const ownerView = await request(app)
       .get(`/lists/${listId}`)
-      .set('Authorization', `Bearer ${owner.token}`);
+      .set('Cookie', `gifty_access=${owner.access}`);
     expect(ownerView.status).toBe(200);
     const ownerItem = ownerView.body.list.items.find((i: any) => i.id === itemId);
     expect(ownerItem.claimantDisplayName).toBeUndefined();
@@ -319,12 +339,12 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
 
     const perms = await request(app)
       .get(`/lists/${listId}/share-permissions`)
-      .set('Authorization', `Bearer ${owner.token}`);
+      .set('Cookie', `gifty_access=${owner.access}`);
     const permId = perms.body.permissions[0].id;
 
     const revokeRes = await request(app)
       .delete(`/lists/${listId}/share/${permId}`)
-      .set('Authorization', `Bearer ${owner.token}`);
+      .set('Cookie', `gifty_access=${owner.access}`);
     expect(revokeRes.status).toBe(204);
 
     const reShareRes = await shareList(app, owner, listId, recipient);
@@ -345,7 +365,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
 
     const unclaim = await request(app)
       .post(`/items/${itemId}/unclaim`)
-      .set('Authorization', `Bearer ${recipient.token}`);
+      .set('Cookie', `gifty_access=${recipient.access}`);
     expect(unclaim.status).toBe(200);
     expect(unclaim.body.item.state).toBe('available');
 
@@ -371,7 +391,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
 
     const unpurchase = await request(app)
       .post(`/items/${itemId}/unpurchase`)
-      .set('Authorization', `Bearer ${recipient.token}`);
+      .set('Cookie', `gifty_access=${recipient.access}`);
     expect(unpurchase.status).toBe(200);
     expect(unpurchase.body.item.state).toBe('claimed');
 
@@ -393,7 +413,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
     // Owner cannot claim
     const ownerClaim = await request(app)
       .post(`/items/${itemId}/claim`)
-      .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
       .send({ claimantUserId: owner.id });
     expect(ownerClaim.status).toBe(403);
     expect(ownerClaim.body.message).toBeTruthy();
@@ -401,7 +421,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
     // Outsider cannot claim (no permission)
     const outsiderClaim = await request(app)
       .post(`/items/${itemId}/claim`)
-      .set('Authorization', `Bearer ${outsider.token}`)
+      .set('Cookie', `gifty_access=${outsider.access}`)
       .send({ claimantUserId: outsider.id });
     expect(outsiderClaim.status).toBe(403);
 
@@ -413,13 +433,13 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
     // Item is immutable
     const patch = await request(app)
       .patch(`/items/${itemId}`)
-      .set('Authorization', `Bearer ${owner.token}`)
+      .set('Cookie', `gifty_access=${owner.access}`)
       .send({ name: 'Changed' });
     expect(patch.status).toBe(403);
 
     const del = await request(app)
       .delete(`/items/${itemId}`)
-      .set('Authorization', `Bearer ${owner.token}`);
+      .set('Cookie', `gifty_access=${owner.access}`);
     expect(del.status).toBe(403);
   });
 
@@ -445,7 +465,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
 
       const unpurchaseRes = await request(app)
         .post(`/items/${itemId}/unpurchase`)
-        .set('Authorization', `Bearer ${recipient.token}`);
+        .set('Cookie', `gifty_access=${recipient.access}`);
       if (unpurchaseRes.status === 200) successes++;
     }
 

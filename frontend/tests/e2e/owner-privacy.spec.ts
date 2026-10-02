@@ -21,18 +21,18 @@ test.describe('T037: Owner privacy visibility', () => {
     const recipient = await apiRegister(recipientEmail, E2E_PASSWORD, 'E2E Recipient');
 
     // Owner creates a list with 2 items
-    const { list } = await apiCreateList(owner.token, {
+    const { list } = await apiCreateList(owner.cookie, {
       title: 'E2E Privacy List',
     });
-    const item1 = (await apiCreateItem(owner.token, list.id, { name: 'Espresso Machine' })).item;
-    const item2 = (await apiCreateItem(owner.token, list.id, { name: 'Cookbook' })).item;
+    const item1 = (await apiCreateItem(owner.cookie, list.id, { name: 'Espresso Machine' })).item;
+    const item2 = (await apiCreateItem(owner.cookie, list.id, { name: 'Cookbook' })).item;
 
     // Owner shares the list with the recipient
-    await apiShareList(owner.token, list.id, recipientEmail);
+    await apiShareList(owner.cookie, list.id, recipientEmail);
 
     // Recipient claims + purchases item 1 via API
-    await apiClaimItem(recipient.token, item1.id);
-    await apiPurchaseItem(recipient.token, item1.id);
+    await apiClaimItem(recipient.cookie, item1.id);
+    await apiPurchaseItem(recipient.cookie, item1.id);
 
     // Owner logs in via UI
     await loginViaUI(page, ownerEmail, E2E_PASSWORD);
@@ -60,18 +60,18 @@ test.describe('T037: Owner privacy visibility', () => {
     const recipient = await apiRegister(recipientEmail, E2E_PASSWORD, 'E2E Recipient');
 
     // Owner creates a list with 2 items
-    const { list } = await apiCreateList(owner.token, {
+    const { list } = await apiCreateList(owner.cookie, {
       title: 'E2E Privacy List',
     });
-    const item1 = (await apiCreateItem(owner.token, list.id, { name: 'Espresso Machine' })).item;
-    const item2 = (await apiCreateItem(owner.token, list.id, { name: 'Cookbook' })).item;
+    const item1 = (await apiCreateItem(owner.cookie, list.id, { name: 'Espresso Machine' })).item;
+    const item2 = (await apiCreateItem(owner.cookie, list.id, { name: 'Cookbook' })).item;
 
     // Owner shares the list with the recipient
-    await apiShareList(owner.token, list.id, recipientEmail);
+    await apiShareList(owner.cookie, list.id, recipientEmail);
 
     // Recipient claims + purchases item 1 via API
-    await apiClaimItem(recipient.token, item1.id);
-    await apiPurchaseItem(recipient.token, item1.id);
+    await apiClaimItem(recipient.cookie, item1.id);
+    await apiPurchaseItem(recipient.cookie, item1.id);
 
     // Recipient logs in via UI
     await loginViaUI(page, recipientEmail, E2E_PASSWORD);

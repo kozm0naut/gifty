@@ -1,6 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 
-const isProduction = process.env.NODE_ENV === 'production';
+/**
+ * FR-011: the single stable body for internal (server-side) failures in
+ * production. It never carries a stack trace, file path, query, or driver
+ * detail — the only thing a caller learns is that *something* went wrong.
+ */
+const INTERNAL_ERROR = 'An internal error occurred.';
+
+/**
+ * Read at request time (not module-load time) so the handler reflects the
+ * environment it is actually running under — including tests that set
+ * `NODE_ENV` after import.
+ */
+function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
 
 export function errorHandler(
   err: Error,
@@ -9,18 +23,21 @@ export function errorHandler(
   next: NextFunction
 ) {
   // Log full stack in development; only the message in production to avoid leaking internals.
-  if (isProduction) {
+  if (isProduction()) {
     console.error(`[Error] ${req.method} ${req.path} — ${err.message}`);
   } else {
     console.error(`[Error] ${req.method} ${req.path} — ${err.stack}`);
   }
 
   const status = (err as any).status || 500;
-  // In production, hide internal error messages for 5xx to avoid leaking implementation details.
-  const message = status >= 500 && isProduction
-    ? 'Internal Server Error'
-    : (err.message || 'Internal Server Error');
+  // FR-011: in production, every 5xx collapses to the stable generic body —
+  // the raw error text (which may name a file, table, or driver) is never
+  // echoed. 4xx keep their specific, stable message (the `{ message }` shape
+  // the client and inline router errors use).
+  const body =
+    status >= 500 && isProduction()
+      ? { error: INTERNAL_ERROR }
+      : { message: (err as any).message || (status >= 500 ? 'Internal Server Error' : 'Request failed') };
 
-  // Flat { message } shape — consistent with inline router errors and the frontend's handleResponse.
-  res.status(status).json({ message });
+  res.status(status).json(body);
 }

@@ -5,6 +5,7 @@
 #   * DB internal-only: NOT published to the host (Constitution §I/§IV)
 #   * data volume     : gifty_postgres_data (survives `down`, removed by `down -v`)
 #   * JWT_SECRET      : REQUIRED — no default; startup fails fast if unset (§IV)
+#   * POSTGRES_PASSWORD : REQUIRED — no default (FR-006); a known default is refused
 
 services:
   postgres:
@@ -13,7 +14,9 @@ services:
     environment:
       POSTGRES_DB: gifty
       POSTGRES_USER: gifty
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gifty_dev_password}
+      # REQUIRED — no default (FR-006): the operator supplies a strong credential
+      # via .env / the environment; a known default is refused by the app's boot gate.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - gifty_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -37,9 +40,15 @@ services:
       NODE_ENV: production
       # PORT is fixed to 4000 inside the image (Dockerfile ENV); the host-side
       # ${PORT:-8080} in `ports:` below is the only published mapping.
-      DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD:-gifty_dev_password}@postgres:5432/gifty?schema=public
+      # ${POSTGRES_PASSWORD} is REQUIRED (no default; FR-006) from the operator env.
+      DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD}@postgres:5432/gifty?schema=public
       # Required — injected from .env at `up` time; no default is permitted.
       JWT_SECRET: ${JWT_SECRET}
+      # Optional operator settings (US2 trust boundary, FR-003/FR-004):
+      # CORS_ORIGINS — comma-separated allow-list; unset = closed by default.
+      # CSP_FONT_ORIGIN — CSP font-src permitted origin(s); default = Google Fonts.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      CSP_FONT_ORIGIN: ${CSP_FONT_ORIGIN:-}
     ports:
       - "${PORT:-8080}:4000"
     depends_on:

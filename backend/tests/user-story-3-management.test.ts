@@ -5,6 +5,18 @@ import { createApp } from '../src/app.js';
 
 const uniqueEmail = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
 
+/** Extract the `gifty_access` value from a supertest Set-Cookie header. */
+function accessCookie(setCookieHeader: unknown): string {
+  const arr = Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : [];
+  for (const c of arr) {
+    const s = String(c);
+    if (s.startsWith('gifty_access=')) {
+      return s.split(';')[0].slice('gifty_access='.length);
+    }
+  }
+  throw new Error('no gifty_access cookie in response');
+}
+
 describe('User Story 3 - Permission Management', () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret';
@@ -24,12 +36,12 @@ describe('User Story 3 - Permission Management', () => {
       password: 'Password123!',
       displayName: 'Owner',
     });
-    const ownerToken = ownerResponse.body.token;
+    const ownerToken = accessCookie(ownerResponse.headers['set-cookie']);
 
     // Setup List
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', `gifty_access=${ownerToken}`)
       .send({ title: 'Permissions Test List' });
     const listId = listResponse.body.list.id;
 
@@ -52,26 +64,28 @@ describe('User Story 3 - Permission Management', () => {
     // Create Permissions
     await request(app)
       .post(`/lists/${listId}/share`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', `gifty_access=${ownerToken}`)
       .send({ recipientUserId: r1Id, permission: 'shared' as any });
 
     await request(app)
       .post(`/lists/${listId}/share`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', `gifty_access=${ownerToken}`)
       .send({ recipientUserId: r2Id, permission: 'shared' as any });
 
     // Act
     const getResponse = await request(app)
       .get(`/lists/${listId}/share-permissions`)
-      .set('Authorization', `Bearer ${ownerToken}`);
+      .set('Cookie', `gifty_access=${ownerToken}`);
 
     // Assert
     expect(getResponse.status).toBe(200);
     expect(getResponse.body.permissions).toHaveLength(2);
     
     const permissions = getResponse.body.permissions;
-    expect(permissions.some((p: any) => p.recipientUserId === r1Id && p.permission === 'shared')).toBe(true);
-    expect(permissions.some((p: any) => p.recipientUserId === r2Id && p.permission === 'shared')).toBe(true);
+    // Uniform owner share view (Phase 12, FR-010/FR-021): entries are located
+    // by the invite email — no per-entry recipientUserId/consent fields.
+    expect(permissions).toHaveLength(2);
+    expect(permissions.every((p: any) => p.permission === 'shared' && p.recipientEmail)).toBe(true);
   });
 
   it('revokes a permission', async () => {
@@ -84,12 +98,12 @@ describe('User Story 3 - Permission Management', () => {
       password: 'Password123!',
       displayName: 'Owner',
     });
-    const ownerToken = ownerResponse.body.token;
+    const ownerToken = accessCookie(ownerResponse.headers['set-cookie']);
 
     // Setup List
     const listResponse = await request(app)
       .post('/lists')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', `gifty_access=${ownerToken}`)
       .send({ title: 'Revocation Test List' });
     const listId = listResponse.body.list.id;
 
@@ -104,19 +118,19 @@ describe('User Story 3 - Permission Management', () => {
     // Create Permission
     const shareResponse = await request(app)
       .post(`/lists/${listId}/share`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', `gifty_access=${ownerToken}`)
       .send({ recipientUserId: r1Id, permission: 'shared' });
     const permissionId = shareResponse.body.sharePermission.id;
 
     // Act
     const deleteResponse = await request(app)
       .delete(`/lists/${listId}/share/${permissionId}`)
-      .set('Authorization', `Bearer ${ownerToken}`);
+      .set('Cookie', `gifty_access=${ownerToken}`);
 
     // Verify revocation
     const getResponse = await request(app)
       .get(`/lists/${listId}/share-permissions`)
-      .set('Authorization', `Bearer ${ownerToken}`);
+      .set('Cookie', `gifty_access=${ownerToken}`);
 
     // Assert
     expect(deleteResponse.status).toBe(204);
