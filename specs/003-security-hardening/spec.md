@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-27
 
-**Status**: In Progress
+**Status**: Implemented (feature `003-security-hardening` complete; all tasks T001–T066 in `tasks.md` marked `[x]`)
 
 **Input**: User description: "Let's make a spec for security hardening based on everything we've gone over, including what not to regress on"
 
