@@ -40,14 +40,28 @@ $secret = -join ((48..57) + (97..122) + (65..90) | Get-Random -Count 48 | ForEac
 sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')|" .env && rm .env.bak
 ```
 
-Other variables (all optional, sensible dev defaults already in `.env.example`):
+Other variables (`POSTGRES_PASSWORD` is **required** — no default since the
+security-hardening boot gate; the rest are optional with the defaults shown):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `POSTGRES_DB` | `gifty` | Database name |
 | `POSTGRES_USER` | `gifty` | Database user |
-| `POSTGRES_PASSWORD` | `gifty_dev_password` | Database password (change for any shared use) |
+| `POSTGRES_PASSWORD` | *(none — required)* | Database credential. **No default** (spec 003 US3/T024); generate a strong value like `JWT_SECRET`. |
 | `PORT` | `8080` | Host port for the app URL |
+
+Set `POSTGRES_PASSWORD` the same way as `JWT_SECRET` (32+ random characters):
+
+```powershell
+# PowerShell
+$pw = -join ((48..57) + (97..122) + (65..90) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
+(Get-Content .env) -replace '^POSTGRES_PASSWORD=.*', "POSTGRES_PASSWORD=$pw" | Set-Content .env
+```
+
+```bash
+# Linux / macOS
+sed -i.bak "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')|" .env && rm .env.bak
+```
 
 > `.env` is git-ignored. Never commit secrets.
 
