@@ -222,6 +222,25 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
   const displayInitials = (r: api.SharePermission) =>
     anonymous(r) ? '?' : getInitials(r.recipientDisplayName ?? r.recipientEmail ?? '???');
 
+  // Display order for the "Shared with" list (avatar stack + popover):
+  //   1. Revealed recipients, alphabetical by display name
+  //   2. Self (viewer's own masked entry) — only present in recipient view
+  //   3. Remaining unknowns (unregistered or non-revealed others)
+  const sortedRecipients = [...recipients].sort((a, b) => {
+    const cat = (r: api.SharePermission): number => {
+      if (!anonymous(r)) return 0;            // revealed
+      if (maskSelf && isOwnEntry(r)) return 1; // self (masked)
+      return 2;                                 // other unknown
+    };
+    const ca = cat(a), cb = cat(b);
+    if (ca !== cb) return ca - cb;
+    if (ca === 0) {
+      // Alphabetical by display name within the revealed group.
+      return (a.recipientDisplayName ?? '').localeCompare(b.recipientDisplayName ?? '');
+    }
+    return 0;
+  });
+
   return (
     <div
       className="list-page"
@@ -300,7 +319,7 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
               Loading…
             </span>
           )}
-          {recipients.slice(0, 8).map((r) => (
+          {sortedRecipients.slice(0, 8).map((r) => (
             <span
               key={r.id}
               className="avatar"
@@ -310,12 +329,12 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
               {displayInitials(r)}
             </span>
           ))}
-          {recipients.length > 8 && (
+          {sortedRecipients.length > 8 && (
             <span
               className="avatar avatar-more"
-              title={recipients.slice(8).map((r) => displayName(r)).join('\n')}
+              title={sortedRecipients.slice(8).map((r) => displayName(r)).join('\n')}
             >
-              +{recipients.length - 8}
+              +{sortedRecipients.length - 8}
             </span>
           )}
           {isOwner && (
@@ -353,7 +372,7 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
               Shared with {recipients.length} {recipients.length === 1 ? 'person' : 'people'}
             </div>
             <ul className="avatar-popover-list">
-              {recipients.map((r) => (
+              {sortedRecipients.map((r) => (
                 <li key={r.id} className="avatar-popover-item">
                   <span
                     className="avatar-popover-dot"

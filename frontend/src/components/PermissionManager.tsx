@@ -110,7 +110,15 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
           <p className="faint recipient-empty">No one has access to this list yet.</p>
         ) : (
           <ul className="recipient-list">
-            {permissions.map((p) => {
+            {[...permissions].sort((a, b) => {
+              const aRevealed = !!a.recipientDisplayName;
+              const bRevealed = !!b.recipientDisplayName;
+              if (aRevealed !== bRevealed) return aRevealed ? -1 : 1;
+              if (aRevealed) {
+                return (a.recipientDisplayName ?? '').localeCompare(b.recipientDisplayName ?? '');
+              }
+              return 0;
+            }).map((p) => {
               // Uniform share view (Phase 12, FR-010/FR-021): every entry
               // renders the same way — the invite email (the owner's source of
               // truth) plus the display name ONLY when the recipient consented

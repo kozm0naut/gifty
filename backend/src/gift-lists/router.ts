@@ -450,21 +450,31 @@ export function createListRouter() {
     // fingerprint "registered") and NO `consent` (non-null would do the same) —
     // the owner cannot distinguish registered from unregistered invitees, and
     // consent state is the recipient's private choice, not owner-queryable.
-    const uniform = [
+    // Merge both sources, then sort by createdAt so the owner sees entries
+    // in the order they were invited (not "all registered, then all pending").
+    // This matters because the two tables are queried independently; without
+    // a temporal sort, a pending invitation that was sent before a registered
+    // permission would appear after it, vaguely leaking account existence.
+    const merged = [
       ...permissions.map((p) => ({
         id: p.id,
         recipientDisplayName:
           p.nameDisclosureConsent === 'revealed' ? p.recipient.displayName : null,
         permission: p.permission,
         recipientEmail: p.recipientEmail,
+        createdAt: p.createdAt,
       })),
       ...pendingInvitations.map((i) => ({
         id: i.id,
         recipientDisplayName: null,
         permission: 'shared' as const,
         recipientEmail: i.inviteeEmail,
+        createdAt: i.createdAt,
       })),
-    ];
+    ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    // Drop the internal sort key before sending.
+    const uniform = merged.map(({ createdAt: _createdAt, ...entry }) => entry);
 
     res.status(200).json({ permissions: uniform });
   });
@@ -579,7 +589,10 @@ export function createListRouter() {
     // on this list. The recipient always sees their own name (it is their
     // own identity), and the owner always sees names (the owner's sharing
     // view is the source of truth).
-    const recipients = [
+    // Merge both sources with createdAt, then sort by it so the relative
+    // order of entries reflects invite timing rather than table membership
+    // (registered-then-pending would leak which invitees have registered).
+    const merged = [
       ...permissions.map((p) => {
         const ownEntry = p.recipientUserId === req.user!.id;
         const visibleName =
@@ -592,6 +605,7 @@ export function createListRouter() {
           id: p.id,
           recipientUserId: p.recipientUserId,
           recipientDisplayName: visibleName,
+          createdAt: p.createdAt,
         };
       }),
       // Unregistered invitees: same anonymous placeholder for every viewer,
@@ -601,8 +615,12 @@ export function createListRouter() {
         id: i.id,
         recipientUserId: null,
         recipientDisplayName: ANONYMOUS_DISPLAY_NAME,
+        createdAt: i.createdAt,
       })),
-    ];
+    ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    // Drop the internal sort key before sending.
+    const recipients = merged.map(({ createdAt: _createdAt, ...entry }) => entry);
 
     res.status(200).json({ recipients });
   });
