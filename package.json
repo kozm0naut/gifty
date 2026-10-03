@@ -9,6 +9,7 @@
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
     "test": "npm --prefix backend run test",
+    "predocker:up": "node scripts/ensure-env.mjs",
     "docker:up": "docker compose up --build -d",
     "typecheck:backend": "npm --prefix backend run typecheck",
     "typecheck:frontend": "npm --prefix backend exec tsc -- -p ../frontend/tsconfig.json --noEmit",

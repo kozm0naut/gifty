@@ -27,15 +27,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # Credentials: JWT_SECRET AND POSTGRES_PASSWORD are required with no
+      # default (Constitution §IV / FR-006). A clean runner has no .env, so seed
+      # them once via the SAME mechanism local `npm run docker:up` uses
+      # (scripts/ensure-env.mjs — absent-only, idempotent, strong random). The
+      # .env persists across this job's steps, so the later `up` reuses it.
+      - name: Seed run-scoped credentials (POSTGRES_PASSWORD + JWT_SECRET)
+        run: node scripts/ensure-env.mjs
+
       # 1. WARM: allowed to pull (FR-009 permits first-build network access).
-      # The compose model is validated at build time; JWT_SECRET and
-      # POSTGRES_PASSWORD are required (no default) so supply run-scoped
-      # credentials (POSTGRES_PASSWORD required since spec 003 US3/T024).
+      # The compose model is validated at build time (credentials now in .env).
       - name: Warm build (populates the cache)
         run: |
           set -eu
-          export JWT_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-          export POSTGRES_PASSWORD="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
           docker compose build
 
       # 2. PROVE: identical build with the build sandbox's network disabled.
@@ -52,12 +56,11 @@ jobs:
           fi
           echo "Offline rebuild completed: every step served from cache."
 
-      # 3. RUN: the cached image must actually start and serve.
+      # 3. RUN: the cached image must actually start and serve. Credentials are
+      # already seeded into .env by the step above (reused, not re-generated).
       - name: Start from cache + readiness (docker compose up -d)
         run: |
           set -eu
-          export JWT_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-          export POSTGRES_PASSWORD="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
           docker compose up -d
           for i in $(seq 1 120); do
             if curl -fs http://localhost:8080/healthz > /dev/null 2>&1; then
