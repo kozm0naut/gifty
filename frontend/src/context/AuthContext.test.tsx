@@ -121,7 +121,11 @@ describe('AuthContext (T027)', () => {
 
     // A prior stolen-session event may have left a security notice behind.
     expireSession({ message: SESSION_SECURITY_MESSAGE, security: true });
-    expect(m.value()?.sessionNotice).toEqual({ message: SESSION_SECURITY_MESSAGE, security: true });
+    expect(m.value()?.sessionNotice).toEqual({
+      message: SESSION_SECURITY_MESSAGE,
+      security: true,
+      tone: 'security',
+    });
 
     // The sign-in form already set the cookies server-side; login() only
     // adopts the user into React state.
@@ -148,7 +152,13 @@ describe('AuthContext (T027)', () => {
     });
 
     expect(logoutSession).toHaveBeenCalledTimes(1);
-    expect(m.value()).toMatchObject({ user: null, isAuthenticated: false, sessionNotice: null });
+    expect(m.value()).toMatchObject({ user: null, isAuthenticated: false });
+    // Sign-out confirmation surfaces on the sign-in page.
+    expect(m.value()?.sessionNotice).toEqual({
+      message: 'You are now logged out.',
+      security: false,
+      tone: 'info',
+    });
   });
 
   it('logout() still succeeds when the server says the session is already gone (401)', async () => {
@@ -165,6 +175,24 @@ describe('AuthContext (T027)', () => {
     expect(m.value()?.user).toBeNull();
   });
 
+  it('removeAccount() clears state and surfaces the deletion confirmation notice', async () => {
+    vi.mocked(fetchAccount).mockResolvedValue(ALICE);
+    const m = mount();
+    await m.flush();
+    expect(m.value()?.user).toEqual(ALICE);
+
+    act(() => {
+      m.value()?.removeAccount();
+    });
+
+    expect(m.value()).toMatchObject({ user: null, isAuthenticated: false });
+    expect(m.value()?.sessionNotice).toEqual({
+      message: 'Your account was successfully deleted.',
+      security: false,
+      tone: 'info',
+    });
+  });
+
   it('a security session-expired event sets the security notice and clears the user', async () => {
     vi.mocked(fetchAccount).mockResolvedValue(ALICE);
     const m = mount();
@@ -174,7 +202,11 @@ describe('AuthContext (T027)', () => {
     expireSession({ message: SESSION_SECURITY_MESSAGE, security: true });
 
     expect(m.value()?.user).toBeNull();
-    expect(m.value()?.sessionNotice).toEqual({ message: SESSION_SECURITY_MESSAGE, security: true });
+    expect(m.value()?.sessionNotice).toEqual({
+      message: SESSION_SECURITY_MESSAGE,
+      security: true,
+      tone: 'security',
+    });
   });
 
   it('a plain session-expired event sets a non-security notice', async () => {
@@ -185,7 +217,11 @@ describe('AuthContext (T027)', () => {
     expireSession({ message: SESSION_EXPIRED_MESSAGE });
 
     expect(m.value()?.user).toBeNull();
-    expect(m.value()?.sessionNotice).toEqual({ message: SESSION_EXPIRED_MESSAGE, security: false });
+    expect(m.value()?.sessionNotice).toEqual({
+      message: SESSION_EXPIRED_MESSAGE,
+      security: false,
+      tone: 'warning',
+    });
   });
 
   it('clearSessionNotice() removes the pending notice', async () => {

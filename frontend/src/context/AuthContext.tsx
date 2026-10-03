@@ -17,6 +17,12 @@ export interface SessionNotice {
   message: string;
   /** True when the termination was a refresh-token-reuse (theft) signal (FR-026). */
   security: boolean;
+  /**
+   * Presentation hint for the sign-in page. 'security' (red, FR-027 theft
+   * signal), 'warning' (yellow, expired session), 'info' (green, positive
+   * confirmations: signed out / account removed).
+   */
+  tone: 'security' | 'warning' | 'info';
 }
 
 interface AuthContextType {
@@ -81,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // already invalid — still clear locally
     }
     setUser(null);
-    setSessionNotice(null);
+    setSessionNotice({ message: 'You are now logged out.', security: false, tone: 'info' });
   }, []);
 
   // Account removal (US7): the server has already deleted the user and cleared
@@ -89,7 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // sign-in page. No further server call is needed (the account is gone).
   const removeAccount = useCallback(() => {
     setUser(null);
-    setSessionNotice(null);
+    setSessionNotice({
+      message: 'Your account was successfully deleted.',
+      security: false,
+      tone: 'info',
+    });
   }, []);
 
   const clearSessionNotice = useCallback(() => setSessionNotice(null), []);
@@ -106,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSessionNotice({
         message: detail?.message || 'Your session has expired. Please log in again.',
         security: detail?.security === true,
+        tone: detail?.security ? 'security' : 'warning',
       });
       setUser(null);
     };

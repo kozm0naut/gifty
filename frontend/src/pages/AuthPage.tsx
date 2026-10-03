@@ -49,13 +49,18 @@ export function AuthPage() {
       <div className="card card-pad auth-card">
       <h2 className="auth-card-title">{mode === 'login' ? 'Login' : 'Register'}</h2>
       {sessionNotice && (
-        sessionNotice.security ? (
-          <div className="alert alert-error" role="alert">
-            {sessionNotice.message}
-          </div>
-        ) : (
-          <div className="alert alert-warning">{sessionNotice.message}</div>
-        )
+        <div
+          className={
+            sessionNotice.tone === 'security'
+              ? 'alert alert-error'
+              : sessionNotice.tone === 'info'
+                ? 'alert alert-success'
+                : 'alert alert-warning'
+          }
+          role="alert"
+        >
+          {sessionNotice.message}
+        </div>
       )}
       {error && <div className="alert alert-error">{error}</div>}
       <form onSubmit={handleSubmit} className="form-stack">
