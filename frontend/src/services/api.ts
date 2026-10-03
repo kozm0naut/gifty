@@ -56,7 +56,9 @@ export type GiftItem = {
    *  The purchaser is always the claimant, so this single name covers both. */
   claimantDisplayName?: string | null;
   createdAt: string;
-  updatedAt: string;
+  // Present in recipient responses; the owner-facing projection omits it (the
+  // claim/purchase timestamps + activity beacon must not reach the owner).
+  updatedAt?: string;
 };
 
 export type DashboardList = GiftList & {

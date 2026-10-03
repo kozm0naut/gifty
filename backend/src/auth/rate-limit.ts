@@ -117,18 +117,18 @@ export function retryAfterSeconds(): number {
 }
 
 /**
- * Extract the client IP in trusted-proxy mode (research D1): the leftmost
- * value of `X-Forwarded-For`, falling back to the direct TCP peer (`req.ip`).
- * Defensive about IPv4-mapped IPv6 prefixes (`::ffff:1.2.3.4`).
+ * The client IP used as the per-source rate-limit key (FR-001, research D1).
+ *
+ * Delegates to `req.ip`, which honors the app's Express trust-proxy setting
+ * (see `createApp`): with trust proxy OFF (default, no fronting proxy) it is
+ * the direct TCP peer and a client-supplied `X-Forwarded-For` is IGNORED — so
+ * a client cannot rotate the per-source budget by spoofing the header; with
+ * trust proxy ON (behind a trusted proxy) it is the original client from the
+ * chain. `normalizeIp` strips IPv4-mapped IPv6 prefixes (`::ffff:1.2.3.4`).
  */
 export function clientIp(req: Request): string {
-  const xff = req.headers['x-forwarded-for'];
-  if (typeof xff === 'string' && xff.trim().length > 0) {
-    const first = xff.split(',')[0].trim();
-    if (first.length > 0) return normalizeIp(first);
-  }
-  const fallback = req.ip ?? req.socket?.remoteAddress ?? 'unknown';
-  return normalizeIp(String(fallback));
+  const ip = req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+  return normalizeIp(String(ip));
 }
 
 function normalizeIp(ip: string): string {

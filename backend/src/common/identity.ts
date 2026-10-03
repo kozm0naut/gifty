@@ -121,3 +121,57 @@ export function decorateItemIdentity<T extends IdentitySource>(
     claimantDisplayName: item.claimantUserId ? (names.get(item.claimantUserId) ?? null) : null,
   }));
 }
+
+/**
+ * The minimum structural shape of a `GiftItem` row needed to build the
+ * owner-safe projection. Declared independently of the Prisma client so this
+ * helper stays decoupled from the ORM's generated types (and from
+ * `Prisma.Decimal`).
+ */
+export interface OwnerSafeItemSource {
+  id: string;
+  giftListId: string;
+  name: string;
+  description: string | null;
+  quantity: number | null;
+  unitPrice: unknown;
+  createdAt: Date;
+}
+
+/**
+ * Owner-safe projection of a gift item (FR-009 / SC-005, Constitution I–II).
+ *
+ * The list owner must NEVER see claim/purchase state or claimant identity on
+ * their own lists. This is a WHITELIST, not a blacklist: only the fields an
+ * owner is entitled to are copied out, so a field added to `GiftItem` later is
+ * hidden from the owner automatically (fail-closed). `state` is forced to
+ * `available` because the owner's view has no claim/purchase concept.
+ *
+ * Excluded on purpose (owner must not observe):
+ *   - claimantUserId / claimedAt / purchasedAt — claim/purchase state + identity
+ *   - updatedAt — mutated by every claim/purchase, an activity beacon
+ *
+ * Use ONLY for owner-facing responses. Recipient-facing responses keep full
+ * state and use `decorateItemIdentity` instead.
+ */
+export function projectOwnerVisibleItem<T extends OwnerSafeItemSource>(item: T): {
+  id: string;
+  giftListId: string;
+  name: string;
+  description: string | null;
+  quantity: number | null;
+  unitPrice: unknown;
+  state: 'available';
+  createdAt: Date;
+} {
+  return {
+    id: item.id,
+    giftListId: item.giftListId,
+    name: item.name,
+    description: item.description,
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+    state: 'available',
+    createdAt: item.createdAt,
+  };
+}

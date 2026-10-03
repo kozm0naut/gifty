@@ -150,4 +150,88 @@ describe('User Story 3 - Share a list with trusted recipients', () => {
     expect(recipientView.body.list.items[0].state).toBe('claimed');
     expect(recipientView.body.list.items[0].claimantUserId).toBe(recipientResponse.body.user.id);
   });
+
+  it('never leaks claim/purchase state or identity in the owner-facing item payload (FR-009 / SC-005)', async () => {
+    // The owner-safe projection is a whitelist: no matter what claim/purchase
+    // metadata the recipient produces (claimedAt, purchasedAt, updatedAt bumps,
+    // claimantUserId), NONE of it may reach the owner. Assert the owner's item
+    // payload carries none of these fields at all — not just a null value —
+    // so a field added to GiftItem later stays hidden (fail-closed).
+    const app = await createApp();
+
+    const ownerResponse = await request(app).post('/auth/register').send({
+      email: uniqueEmail('fp-owner'),
+      password: 'Password123!',
+      displayName: 'Fingerprint Owner',
+    });
+    const recipientResponse = await request(app).post('/auth/register').send({
+      email: uniqueEmail('fp-recipient'),
+      password: 'Password123!',
+      displayName: 'Fingerprint Recipient',
+    });
+
+    const listResponse = await request(app)
+      .post('/lists')
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`)
+      .send({ title: 'Fingerprint List' });
+
+    await request(app)
+      .post(`/lists/${listResponse.body.list.id}/share`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`)
+      .send({ recipientUserId: recipientResponse.body.user.id, permission: 'shared' as any });
+
+    const itemResponse = await request(app)
+      .post(`/lists/${listResponse.body.list.id}/items`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`)
+      .send({ name: 'Espresso Machine', quantity: 1 });
+
+    const itemId = itemResponse.body.item.id;
+
+    // Recipient claims then purchases, mutating claimedAt / purchasedAt /
+    // updatedAt and setting claimantUserId.
+    const claim = await request(app)
+      .post(`/items/${itemId}/claim`)
+      .set('Cookie', `gifty_access=${accessCookie(recipientResponse.headers['set-cookie'])}`)
+      .send({ claimantUserId: recipientResponse.body.user.id });
+    const purchase = await request(app)
+      .post(`/items/${itemId}/purchase`)
+      .set('Cookie', `gifty_access=${accessCookie(recipientResponse.headers['set-cookie'])}`);
+    expect(claim.status).toBe(200);
+    expect(purchase.status).toBe(200);
+    // Sanity: the recipient DOES see the full state (guards the whitelist from
+    // over-stripping).
+    expect(purchase.body.item.state).toBe('purchased');
+    expect(purchase.body.item.claimantUserId).toBe(recipientResponse.body.user.id);
+
+    // Owner reads the item on their own list across every owner-facing surface.
+    const detail = await request(app)
+      .get(`/lists/${listResponse.body.list.id}`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`);
+    const collections = await request(app)
+      .get('/lists')
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`);
+    const itemsOnly = await request(app)
+      .get(`/lists/${listResponse.body.list.id}/items`)
+      .set('Cookie', `gifty_access=${accessCookie(ownerResponse.headers['set-cookie'])}`);
+
+    const ownerItems = [
+      detail.body.list.items[0],
+      collections.body.lists.find((l: any) => l.id === listResponse.body.list.id).items[0],
+      itemsOnly.body.items[0],
+    ];
+
+    const FORBIDDEN = [
+      'claimantUserId',
+      'claimedAt',
+      'purchasedAt',
+      'updatedAt',
+      'claimantDisplayName',
+    ];
+    for (const item of ownerItems) {
+      for (const key of FORBIDDEN) {
+        expect(Object.keys(item)).not.toContain(key);
+      }
+      expect(item.state).toBe('available');
+    }
+  });
 });

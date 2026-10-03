@@ -6,6 +6,7 @@ import { authorizeList } from '../auth/middleware.js';
 import {
   ANONYMOUS_DISPLAY_NAME,
   decorateItemIdentity,
+  projectOwnerVisibleItem,
   resolveConsentedIdentityNames,
 } from '../common/identity.js';
 import { recordAuditEvent } from '../audit/events.js';
@@ -60,11 +61,7 @@ export function createListRouter() {
     // they own.
     const suppressedOwnedLists = ownedLists.map((list) => ({
       ...list,
-      items: (list.items ?? []).map((item) => ({
-        ...item,
-        claimantUserId: undefined,
-        state: 'available' as const,
-      })),
+      items: (list.items ?? []).map(projectOwnerVisibleItem),
     }));
 
     // Shared lists (the requester is a recipient): keep full state AND resolve
@@ -142,11 +139,7 @@ export function createListRouter() {
     let visibleItems;
     if (isOwner) {
       // Owner-privacy boundary (FR-009 / SC-005): no state or identity.
-      visibleItems = updated.items.map((item) => ({
-        ...item,
-        claimantUserId: undefined,
-        state: 'available',
-      }));
+      visibleItems = updated.items.map(projectOwnerVisibleItem);
     } else {
       // Recipient view (FR-009): full state + consent-aware claimant name
       // (FR-021/FR-024).
@@ -640,11 +633,7 @@ export function createListRouter() {
     let visibleItems;
     if (isOwner) {
       // Owner-privacy boundary (FR-009 / SC-005): no state or identity.
-      visibleItems = list.items.map((item) => ({
-        ...item,
-        claimantUserId: undefined,
-        state: 'available',
-      }));
+      visibleItems = list.items.map(projectOwnerVisibleItem);
     } else {
       // Recipient view (FR-009): full state + consent-aware claimant name
       // (FR-021/FR-024).

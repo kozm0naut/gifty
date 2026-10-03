@@ -87,6 +87,11 @@ export async function createApp(): Promise<Express> {
   // FR-012 / US2: never advertise the framework.
   app.disable('x-powered-by');
 
+  // FR-001: client-IP trust. Honor a fronting proxy only when explicitly
+  // configured (TRUST_PROXY); otherwise `req.ip` is the direct TCP peer so a
+  // client cannot spoof `X-Forwarded-For` to rotate the per-source budget.
+  app.set('trust proxy', config.trustProxy);
+
   // CORS closed by default in production; permissive in development (FR-003).
   app.use(cors(corsOptions(config)));
 

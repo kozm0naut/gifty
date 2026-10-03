@@ -36,6 +36,13 @@ if (testDatabaseUrl) {
   process.env.DATABASE_URL = testDatabaseUrl;
 }
 
+// The per-source rate-limit tests simulate distinct sources with the
+// `X-Forwarded-For` header (supertest has no real proxy). Enable Express
+// trust-proxy mode so `clientIp()` honors that header and the per-source
+// tests keep distinguishing sources. Production default stays OFF (direct TCP
+// peer; the header is untrusted and ignored).
+process.env.TRUST_PROXY = '1';
+
 export default defineConfig({
   test: {
     environment: 'node',

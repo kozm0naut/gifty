@@ -82,6 +82,15 @@ export interface Config {
   corsOrigins: string[] | undefined;
   /** CSP `font-src` permitted origin (FR-004). Defaults to the app's font host. */
   cspFontOrigin: string;
+  /**
+   * Express trust-proxy mode for client-IP resolution (FR-001). When `true` the
+   * app is behind a proxy that sets `X-Forwarded-For` and `req.ip` reflects the
+   * original client; when `false` (default) `req.ip` is the direct TCP peer and
+   * client-supplied `X-Forwarded-For` is ignored, so a client cannot rotate the
+   * per-source rate-limit budget by spoofing the header. Set `TRUST_PROXY=1`
+   * when fronting the app with a trusted proxy.
+   */
+  trustProxy: boolean;
 }
 
 /**
@@ -129,6 +138,9 @@ export function loadConfig(): Config {
     // to a valid, space-separated CSP source list. Default keeps the served
     // app's fonts working.
     cspFontOrigin: normalizeCspFontOrigin(process.env.CSP_FONT_ORIGIN),
+    // FR-001: honor X-Forwarded-For only when an operator confirms a fronting
+    // proxy; otherwise use the direct TCP peer (the header is untrusted).
+    trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true',
   };
 }
 

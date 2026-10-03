@@ -4,7 +4,7 @@ import { makeId } from '../common/id.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth/middleware.js';
 import { authorizeItem, authorizeList } from '../auth/middleware.js';
 import { validateCreateGiftItem } from './gift-item.validation.js';
-import { resolveConsentedIdentityNames, decorateItemIdentity } from '../common/identity.js';
+import { resolveConsentedIdentityNames, decorateItemIdentity, projectOwnerVisibleItem } from '../common/identity.js';
 import { recordAuditEvent } from '../audit/events.js';
 import { clientIp } from '../auth/rate-limit.js';
 
@@ -354,11 +354,7 @@ export function createItemRouter() {
     if (isOwner) {
       // Owner-privacy boundary (FR-009 / SC-005): strip all claim/purchase
       // state and identity from the owner's own list.
-      const visibleItems = items.map((item) => ({
-        ...item,
-        claimantUserId: undefined,
-        state: 'available' as const,
-      }));
+      const visibleItems = items.map(projectOwnerVisibleItem);
       return res.status(200).json({ items: visibleItems });
     }
 
