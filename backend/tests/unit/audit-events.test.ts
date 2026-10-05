@@ -103,10 +103,16 @@ describe('recordAuditEvent (T009)', () => {
     // 13 actions from the original security-hardening baseline (data-model.md)
     // plus the two US5 (consent) actions: `consent_updated` and
     // `invitation_matched`. Both are security-relevant, so FR-013 requires a
-    // recordable audit action for each.
-    expect(AUDIT_ACTIONS).toHaveLength(15);
+    // recordable audit action for each. Feature 004 (email integration) adds
+    // four more (D7): `email_invite_queued`, `email_confirmation_queued`,
+    // `email_delivered`, `email_failed` — so the vocabulary is 19.
+    expect(AUDIT_ACTIONS).toHaveLength(19);
     expect(AUDIT_ACTIONS).toContain('consent_updated');
     expect(AUDIT_ACTIONS).toContain('invitation_matched');
+    expect(AUDIT_ACTIONS).toContain('email_invite_queued');
+    expect(AUDIT_ACTIONS).toContain('email_confirmation_queued');
+    expect(AUDIT_ACTIONS).toContain('email_delivered');
+    expect(AUDIT_ACTIONS).toContain('email_failed');
     for (const action of AUDIT_ACTIONS) {
       (prisma.auditEvent.create as any).mockClear();
       await recordAuditEvent({ action, outcome: 'success' });
@@ -148,10 +154,11 @@ describe('FR-013 append-only audit trail (T064)', () => {
       'utf8',
     );
     // Isolate the AuditEvent model block (from its header to the closing
-    // brace at column 0).
+    // brace at column 0). The split is line-ending-agnostic so it works
+    // whether the file uses LF or CRLF.
     const model = schema
       .split('model AuditEvent {')[1]
-      .split('\n}\n')[0];
+      .split(/\r?\n}\r?\n/)[0];
 
     expect(model).toMatch(/createdAt\s+DateTime\s+@default\(now\(\)\)/);
     expect(model).not.toMatch(/updatedAt/);

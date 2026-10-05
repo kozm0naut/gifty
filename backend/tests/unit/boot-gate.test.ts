@@ -30,6 +30,11 @@ const ENV_KEYS = [
   'LOGIN_MAX_FAILURES_PER_ACCOUNT',
   'ACCESS_TOKEN_TTL_MINUTES',
   'SESSION_MAX_AGE_DAYS',
+  'EMAIL_ENABLED',
+  'EMAIL_TRANSPORT',
+  'RESEND_API_KEY',
+  'RESEND_FROM',
+  'GIFTY_PUBLIC_ORIGIN',
 ];
 
 // A strong, non-default signing secret (>= 32 chars, not on the deny-list).
@@ -64,6 +69,14 @@ beforeEach(() => {
   delete process.env.SESSION_MAX_AGE_DAYS;
   delete process.env.CORS_ORIGINS;
   delete process.env.CSP_FONT_ORIGIN;
+  // Feature 004: keep the email gate out of scope for this 003 boot-gate suite
+  // by disabling email — the production email gate (EMAIL_ENABLED + RESEND_API_KEY)
+  // is exercised by tests/unit/email-boot-gate.test.ts.
+  process.env.EMAIL_ENABLED = 'false';
+  delete process.env.EMAIL_TRANSPORT;
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_FROM;
+  delete process.env.GIFTY_PUBLIC_ORIGIN;
 });
 
 afterEach(() => {

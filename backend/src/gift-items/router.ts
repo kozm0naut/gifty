@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../prisma.js';
 import { makeId } from '../common/id.js';
-import { requireAuth, type AuthenticatedRequest } from '../auth/middleware.js';
+import { requireAuth, requireConfirmed, type AuthenticatedRequest } from '../auth/middleware.js';
 import { authorizeItem, authorizeList } from '../auth/middleware.js';
 import { validateCreateGiftItem } from './gift-item.validation.js';
 import { resolveConsentedIdentityNames, decorateItemIdentity, projectOwnerVisibleItem } from '../common/identity.js';
@@ -40,7 +40,7 @@ export function createItemRouter() {
     return res.status(201).json({ item });
   });
 
-  router.post('/items/:itemId/claim', requireAuth, authorizeItem('claim'), async (req: AuthenticatedRequest, res) => {
+  router.post('/items/:itemId/claim', requireAuth, requireConfirmed, authorizeItem('claim'), async (req: AuthenticatedRequest, res) => {
     const { itemId } = req.params;
     const { claimantUserId } = req.body ?? {};
     const item = await prisma.giftItem.findUnique({ where: { id: itemId } });
@@ -117,7 +117,7 @@ export function createItemRouter() {
     return res.status(200).json({ item: updatedItem });
   });
 
-  router.post('/items/:itemId/purchase', requireAuth, authorizeItem('claim'), async (req: AuthenticatedRequest, res) => {
+  router.post('/items/:itemId/purchase', requireAuth, requireConfirmed, authorizeItem('claim'), async (req: AuthenticatedRequest, res) => {
     const { itemId } = req.params;
     const item = await prisma.giftItem.findUnique({ where: { id: itemId } });
     if (!item) {
@@ -190,7 +190,7 @@ export function createItemRouter() {
     return res.status(200).json({ item: updatedItem });
   });
 
-  router.post('/items/:itemId/unclaim', requireAuth, authorizeItem('claim'), async (req: AuthenticatedRequest, res) => {
+  router.post('/items/:itemId/unclaim', requireAuth, requireConfirmed, authorizeItem('claim'), async (req: AuthenticatedRequest, res) => {
     const { itemId } = req.params;
 
     const item = await prisma.giftItem.findUnique({ where: { id: itemId } });
@@ -265,7 +265,7 @@ export function createItemRouter() {
     return res.status(200).json({ item: updatedItem });
   });
 
-  router.post('/items/:itemId/unpurchase', requireAuth, authorizeItem('claim'), async (req: AuthenticatedRequest, res) => {
+  router.post('/items/:itemId/unpurchase', requireAuth, requireConfirmed, authorizeItem('claim'), async (req: AuthenticatedRequest, res) => {
     const { itemId } = req.params;
 
     const item = await prisma.giftItem.findUnique({ where: { id: itemId } });
@@ -366,7 +366,7 @@ export function createItemRouter() {
     return res.status(200).json({ items: visibleItems });
   });
 
-  router.patch('/items/:itemId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  router.patch('/items/:itemId', requireAuth, requireConfirmed, async (req: AuthenticatedRequest, res) => {
     const { itemId } = req.params;
     const item = await prisma.giftItem.findUnique({ where: { id: itemId } });
     if (!item) {
@@ -376,7 +376,7 @@ export function createItemRouter() {
     return res.status(403).json({ message: 'Gift items are immutable once created' });
   });
 
-  router.delete('/items/:itemId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  router.delete('/items/:itemId', requireAuth, requireConfirmed, async (req: AuthenticatedRequest, res) => {
     const { itemId } = req.params;
     const item = await prisma.giftItem.findUnique({ where: { id: itemId } });
     if (!item) {

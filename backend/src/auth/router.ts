@@ -21,6 +21,9 @@ import {
   retryAfterSeconds,
   clientIp,
 } from './rate-limit.js';
+import { issueToken } from '../email/verification.js';
+import { enqueueConfirmation } from '../email/outbox.js';
+import { buildConfirmationLink } from '../email/links.js';
 
 /**
  * Serialize a Set-Cookie header per the feature 003 contract:
@@ -200,6 +203,55 @@ export function createAuthRouter() {
         });
       }
 
+      // Feature 004 (US2, FR-003): issue a confirmation email for the new
+      // account — UNLESS the email feature is disabled, in which case the
+      // account auto-confirms (FR-016) and no email is sent.
+      //
+      // T017 (FR-006 / lesson from T014): the user row already committed in
+      // autocommit (single statement), so the token + enqueue are SEPARATE
+      // best-effort writes on the base client — deliberately NOT in a
+      // transaction. A failure here only means "no confirmation email yet";
+      // the account still exists and can confirm via resend.
+      const emailEnabled = loadConfig().email.mode !== 'disabled';
+      if (emailEnabled) {
+        try {
+          const token = await issueToken(user.id);
+          const link = buildConfirmationLink(token);
+          const subject = 'Confirm your email address';
+          const bodyText =
+            `Hi ${user.displayName},\n\n` +
+            `Thanks for signing up. Please confirm your email address by opening this link:\n` +
+            `${link}\n\n` +
+            `If you did not create a Gifty account, you can ignore this email.\n`;
+          const confirmation = await enqueueConfirmation(prisma, {
+            userId: user.id,
+            recipientEmail: normalizedEmail,
+            subject,
+            bodyText,
+          });
+          void recordAuditEvent({
+            actorUserId: user.id,
+            action: 'email_confirmation_queued',
+            targetType: 'emailOutbox',
+            targetId: confirmation.outboxMessageId,
+            outcome: 'success',
+            ip,
+          });
+        } catch (err) {
+          // FR-006: registration must not fail because of email.
+          console.error(
+            `[auth/register] confirmation enqueue failed (user=${user.id}, email=${normalizedEmail}):`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      } else {
+        // Disabled mode: auto-confirm the account (FR-016).
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { verifiedAt: new Date() },
+        });
+      }
+
       // Success: open a session and issue the HttpOnly cookie pair (T017).
       // The legacy `token` bridge field is formally retired in US4 — the
       // credential is now exclusively the `gifty_access` cookie.
@@ -214,7 +266,14 @@ export function createAuthRouter() {
       setSessionCookies(res, accessToken, refreshToken);
 
       return res.status(201).json({
-        user: { id: user.id, email: user.email, displayName: user.displayName },
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          // Feature 004 (US2): false when a confirmation email is required
+          // (email enabled); true when disabled (account auto-confirmed).
+          verified: !emailEnabled,
+        },
       });
     } catch (error) {
       next(error);
@@ -281,7 +340,14 @@ export function createAuthRouter() {
       setSessionCookies(res, accessToken, refreshToken);
 
       return res.status(200).json({
-        user: { id: user.id, email: user.email, displayName: user.displayName },
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          // Feature 004 (US2): the client routes an unconfirmed account to the
+          // confirm page right after sign-in.
+          verified: user.verifiedAt != null,
+        },
       });
     } catch (error) {
       next(error);
@@ -334,6 +400,104 @@ export function createAuthRouter() {
         serializeCookie(loadConfig().cookies.refreshName, newRefreshToken, '/auth/refresh'),
       ]);
       res.status(200).json({ user });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Feature 004 (US2, FR-014): re-issue the confirmation email for an
+  // unconfirmed account that holds a live session.
+  //   - 401 — no live session (the credential is the `gifty_access` cookie).
+  //   - 403 — the account is already confirmed (nothing to resend).
+  //   - 429 — the per-account resend budget (default 3 / window) is exhausted.
+  //   - 202 — a new confirmation email was enqueued; the new token supersedes
+  //     the old (issueToken overwrites the stored hash, invalidating the prior
+  //     link).
+  router.post('/resend-confirmation', async (req, res, next) => {
+    try {
+      const cookies = parseCookie(req.headers.cookie ?? '');
+      const accessToken = cookies[loadConfig().cookies.accessName];
+      if (!accessToken) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      const payload = jwt.verify(accessToken, getJwtSecret()) as { sub?: string; sid?: string };
+      const userId = typeof payload.sub === 'string' ? payload.sub : null;
+      if (!userId) {
+        return res.status(401).json({ message: 'Invalid or expired token' });
+      }
+      // Require a live session row (reject revoked/expired sessions).
+      if (typeof payload.sid === 'string') {
+        const resolved = await resolveSessionForAccess(accessToken);
+        if (!resolved || resolved.userId !== userId) {
+          return res.status(401).json({ message: 'Your account is no longer active.' });
+        }
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, displayName: true, verifiedAt: true },
+      });
+      if (!user) {
+        return res.status(401).json({ message: 'Your account is no longer active.' });
+      }
+
+      // Already confirmed → nothing to resend.
+      if (user.verifiedAt != null) {
+        return res.status(403).json({ message: 'Your email is already confirmed.' });
+      }
+
+      // Per-account resend budget (FR-014). Counted on every successful send
+      // so a legitimate user is still capped at a few per window.
+      const ip = clientIp(req);
+      if (isRateLimited('resend-confirmation', userId)) {
+        res.set('Retry-After', String(retryAfterSeconds()));
+        void recordAuditEvent({
+          actorUserId: userId,
+          action: 'auth_rate_limited',
+          outcome: 'failure',
+          ip,
+          targetType: 'auth',
+          detail: { endpoint: 'resend-confirmation' },
+        });
+        return res.status(429).json({
+          message: 'Too many confirmation requests. Please wait a moment and try again.',
+        });
+      }
+      recordFailure('resend-confirmation', userId);
+
+      // Re-issue (supersedes) + enqueue as a separate best-effort write (FR-006).
+      try {
+        const token = await issueToken(userId);
+        const link = buildConfirmationLink(token);
+        const subject = 'Confirm your email address';
+        const bodyText =
+          `Hi ${user.displayName},\n\n` +
+          `You asked to confirm your email address. Open this link to finish:\n` +
+          `${link}\n\n` +
+          `If you did not create a Gifty account, you can ignore this email.\n`;
+        const confirmation = await enqueueConfirmation(prisma, {
+          userId,
+          recipientEmail: user.email,
+          subject,
+          bodyText,
+        });
+        void recordAuditEvent({
+          actorUserId: userId,
+          action: 'email_confirmation_queued',
+          targetType: 'emailOutbox',
+          targetId: confirmation.outboxMessageId,
+          outcome: 'success',
+          ip,
+        });
+      } catch (err) {
+        console.error(
+          `[auth/resend-confirmation] enqueue failed (user=${userId}, email=${user.email}):`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+
+      return res.status(202).json({ message: 'A new confirmation email is on its way.' });
     } catch (error) {
       next(error);
     }

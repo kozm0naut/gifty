@@ -18,6 +18,10 @@ export type AccountUser = {
   id: string;
   email: string;
   displayName: string;
+  /** Feature 004 (US2, FR-012): email confirmed. Derived server-side from
+   *  `verifiedAt !== null`. When absent (older response) the client treats
+   *  the account as confirmed to stay backward compatible. */
+  verified?: boolean;
 };
 // API base URL. Defaults to same-origin (relative paths) so the containerized
 // single-origin deployment (SPA + API on one host/port) works without config;
@@ -239,6 +243,29 @@ export async function logoutSession(): Promise<void> {
   if (response.status !== 204 && response.status !== 401) {
     throw new Error('Failed to sign out');
   }
+}
+
+/**
+ * Re-request a confirmation email (feature 004, US2, FR-014 / FR-016).
+ * Requires a live session (the allow-list endpoint an unconfirmed account may
+ * reach). 202 → queued; 403 → already confirmed; 429 → rate-limited;
+ * 401 → no session. The server's `message` is stable and non-leaking, so it
+ * is surfaced verbatim. A 401 here means "no session" (NOT an expired
+ * session), so it is handled directly rather than through the refresh path.
+ */
+export async function resendConfirmation(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/resend-confirmation`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (response.status === 202) return;
+  const data = await response.json().catch(() => ({}));
+  const message =
+    data?.message ||
+    (response.status === 401
+      ? 'Sign in to request a new confirmation email.'
+      : 'Something went wrong. Please try again.');
+  throw new Error(message);
 }
 
 /**

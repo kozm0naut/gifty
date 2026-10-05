@@ -28,7 +28,14 @@
 import type { Request } from 'express';
 import { loadConfig } from '../config/index.js';
 
-export type BudgetKind = 'login-source' | 'register-source' | 'login-account';
+export type BudgetKind =
+  | 'login-source'
+  | 'register-source'
+  | 'login-account'
+  // Feature 004 (US2, FR-014): verification-email resends, keyed per-account
+  // (userId) and counted on EVERY successful send (not just failures) so a
+  // legitimate user is still capped at a few per window.
+  | 'resend-confirmation';
 
 interface WindowCounter {
   /** Failures recorded in the current window. */
@@ -49,6 +56,9 @@ function budgetFor(kind: BudgetKind): number {
       return rateLimit.registerPerSource;
     case 'login-account':
       return rateLimit.loginPerAccount;
+    // Feature 004 (US2): the per-account resend cap lives on the email config.
+    case 'resend-confirmation':
+      return loadConfig().email.resendMaxPerAccount;
   }
 }
 

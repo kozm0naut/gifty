@@ -28,6 +28,10 @@ beforeEach(() => {
   // Default state for a case: production context, CORS closed by default.
   process.env.NODE_ENV = 'production';
   process.env.JWT_SECRET = 'test-secret-32-characters-long-0000';
+  // Feature 004: these cases exercise CORS/CSP/HSTS, not the email boot gate —
+  // disable email so the production email gate (EMAIL_ENABLED + RESEND_API_KEY)
+  // does not trip.
+  process.env.EMAIL_ENABLED = 'false';
   delete process.env.CORS_ORIGINS;
   delete process.env.CSP_FONT_ORIGIN;
 });

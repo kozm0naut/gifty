@@ -32,7 +32,10 @@ export function AuthPage() {
       // The server has already set the HttpOnly session cookies; adopt the
       // returned user into app state and move on (T027/T029).
       authLogin(data.user);
-      navigate('/');
+      // US2: when the email feature is on, a fresh sign-up (or a login of an
+      // unconfirmed account) carries `verified: false` — send them to the
+      // confirmation page instead of straight into the app.
+      navigate(data.user?.verified === false ? '/confirm' : '/');
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
     } finally {

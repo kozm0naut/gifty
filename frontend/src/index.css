@@ -1555,3 +1555,69 @@ h1 {
   gap: 0.5rem;
   margin-top: 1.25rem;
 }
+
+/* ---- US2 confirmation page ---- */
+.confirm-page {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+.confirm-page--center {
+  align-items: center;
+}
+.confirm-card {
+  max-width: 26rem;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+.confirm-brand {
+  width: 44px;
+  height: 44px;
+  color: var(--brand, #6c5ce7);
+}
+.confirm-title {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.confirm-body {
+  margin: 0;
+  color: var(--muted, #6b7280);
+  line-height: 1.55;
+}
+.confirm-email {
+  font-weight: 600;
+  color: var(--text, #111827);
+  word-break: break-all;
+}
+.confirm-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted, #6b7280);
+}
+.confirm-resend {
+  min-width: 14rem;
+}
+.confirm-msg {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.confirm-msg--ok {
+  color: var(--success, #15803d);
+}
+.confirm-msg--err {
+  color: var(--danger, #b91c1c);
+}
+.confirm-actions {
+  margin-top: 0.25rem;
+}
+.confirm-link {
+  color: var(--brand, #6c5ce7);
+  font-weight: 600;
+  text-decoration: underline;
+}

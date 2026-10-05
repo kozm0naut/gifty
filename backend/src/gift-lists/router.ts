@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../prisma.js';
 import { makeId } from '../common/id.js';
-import { requireAuth, type AuthenticatedRequest } from '../auth/middleware.js';
+import { requireAuth, requireConfirmed, type AuthenticatedRequest } from '../auth/middleware.js';
 import { authorizeList } from '../auth/middleware.js';
 import {
   ANONYMOUS_DISPLAY_NAME,
@@ -11,6 +11,41 @@ import {
 } from '../common/identity.js';
 import { recordAuditEvent } from '../audit/events.js';
 import { clientIp } from '../auth/rate-limit.js';
+import { loadConfig } from '../config/index.js';
+import { buildInviteLink } from '../email/links.js';
+import { enqueueInvite } from '../email/outbox.js';
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * FR-008 / contracts/api.md: build the US1 invite email content. Subject and
+ * bodies are fixed; the only dynamic data is the owner's display name and the
+ * public origin. The link is the home page — no token, no deep link, no raw
+ * list id (FR-013).
+ */
+function buildInviteContent(ownerDisplayName: string | null | undefined) {
+  const link = buildInviteLink();
+  const subject = "You've been shared a gift list";
+  const name = ownerDisplayName || 'Someone';
+  const bodyText =
+    `${name} shared their Gifty gift list with you.\n` +
+    `Open the list: ${link}\n` +
+    `You don't need an account to view a shared list. If you'd like to claim or manage items, ` +
+    `you can sign in or create an account at ${link}.`;
+  const bodyHtml =
+    `<p>${escapeHtml(name)} shared their Gifty gift list with you.</p>` +
+    `<p><a href="${escapeHtml(link)}">Open the list</a></p>` +
+    `<p>You don't need an account to view a shared list. If you'd like to claim or manage items, ` +
+    `you can sign in or create an account at <a href="${escapeHtml(link)}">Gifty</a>.</p>`;
+  return { subject, bodyText, bodyHtml };
+}
 
 /**
  * Attach the owner identity for a list, honoring feature 003 (US5, FR-025 /
@@ -41,6 +76,8 @@ export function createListRouter() {
   const router = Router();
 
   router.use(requireAuth);
+  // Feature 004 (US2, FR-012): every list route requires a confirmed email.
+  router.use(requireConfirmed);
 
   router.get('/', async (req: AuthenticatedRequest, res) => {
     const [ownedLists, sharedPermissions] = await Promise.all([
@@ -257,6 +294,25 @@ export function createListRouter() {
       },
     });
 
+    // Email mode is resolved once per request (FR-016): in `disabled` mode the
+    // share still succeeds but no invite is enqueued — the share response body
+    // and status are identical regardless of email mode.
+    const emailEnabled = loadConfig().email.mode !== 'disabled';
+
+    // Owner's display name personalizes the invite (FR-008). Fetched once; on
+    // failure we fall back to the neutral 'Someone' phrasing so the share
+    // never fails because of a display-name lookup (FR-006).
+    let ownerDisplayName: string | null = null;
+    try {
+      const ownerRow = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { displayName: true },
+      });
+      ownerDisplayName = ownerRow?.displayName ?? null;
+    } catch {
+      ownerDisplayName = null;
+    }
+
     if (targetUserId) {
       // Registered recipient: materialize a SharePermission row (the
       // recipient gets access immediately). A re-invite after revocation is a
@@ -270,6 +326,12 @@ export function createListRouter() {
         },
       });
 
+      // T014 (FR-006/SC-007): the share write commits on its own; the invite
+      // enqueue is a SEPARATE best-effort write on the base client. It is
+      // deliberately NOT in the same transaction: (a) the share must never
+      // fail or roll back because of email (FR-006), and (b) `enqueueInvite`'
+      // P2002 dedup recovery re-queries, which Postgres forbids inside an
+      // aborted transaction (25P02) — so it runs in autocommit.
       let sharePermission;
       if (existing) {
         sharePermission = await prisma.sharePermission.update({
@@ -287,6 +349,38 @@ export function createListRouter() {
             nameDisclosureConsent: 'pending',
             recipientEmail: normalizedEmail ?? undefined,
           },
+        });
+      }
+
+      let invite: { outboxMessageId: string; inserted: boolean } | null = null;
+      if (emailEnabled) {
+        const { subject, bodyText, bodyHtml } = buildInviteContent(ownerDisplayName);
+        try {
+          invite = await enqueueInvite(prisma, {
+            listId,
+            recipientEmail: normalizedEmail as string,
+            subject,
+            bodyText,
+            bodyHtml,
+          });
+        } catch (err) {
+          // FR-006: the share itself must not fail because of email.
+          console.error(
+            `[gift-lists/share] invite enqueue failed (list=${listId}, recipient=${normalizedEmail}):`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+
+      if (invite) {
+        recordAuditEvent({
+          actorUserId: req.user!.id,
+          action: 'email_invite_queued',
+          targetType: 'emailOutbox',
+          targetId: invite.outboxMessageId,
+          outcome: 'success',
+          ip: clientIp(req),
+          detail: { listId, recipientEmail: normalizedEmail },
         });
       }
 
@@ -314,6 +408,9 @@ export function createListRouter() {
     // Always a 201 with the SAME uniform body as the registered-email path —
     // no 404, no different status or shape — so a probe cannot tell which
     // emails are accounts (SC-009).
+    // T014 (FR-006/SC-007): the PendingInvitation write commits on its own;
+    // the invite enqueue is a SEPARATE best-effort write on the base client
+    // (see the registered branch for why it is not transactional).
     const invitation = await prisma.pendingInvitation.upsert({
       where: {
         giftListId_inviteeEmail: {
@@ -330,6 +427,37 @@ export function createListRouter() {
         status: 'pending',
       },
     });
+
+    let invite: { outboxMessageId: string; inserted: boolean } | null = null;
+    if (emailEnabled) {
+      const { subject, bodyText, bodyHtml } = buildInviteContent(ownerDisplayName);
+      try {
+        invite = await enqueueInvite(prisma, {
+          listId,
+          recipientEmail: normalizedEmail as string,
+          subject,
+          bodyText,
+          bodyHtml,
+        });
+      } catch (err) {
+        console.error(
+          `[gift-lists/share] invite enqueue failed (list=${listId}, recipient=${normalizedEmail}):`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
+    if (invite) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'email_invite_queued',
+        targetType: 'emailOutbox',
+        targetId: invite.outboxMessageId,
+        outcome: 'success',
+        ip: clientIp(req),
+        detail: { listId, recipientEmail: normalizedEmail },
+      });
+    }
 
     recordAuditEvent({
       actorUserId: req.user!.id,

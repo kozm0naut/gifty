@@ -24,6 +24,22 @@ function toInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
 
+function toBool(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined || value === '') return fallback;
+  return !(value === 'false' || value === '0' || value === 'off' || value === 'no');
+}
+
+/**
+ * Normalize `GIFTY_PUBLIC_ORIGIN` (D9) into a canonical base URL: trim
+ * whitespace, strip a trailing slash, and fall back to the Docker deployment's
+ * public URL when the operator has not set it.
+ */
+function normalizeOrigin(value: string | undefined, fallback: string): string {
+  const raw = (value ?? '').trim();
+  if (raw === '') return fallback;
+  return raw.replace(/\/+$/, '');
+}
+
 /**
  * Normalize an operator-supplied font-origin value (FR-004) into a valid CSP
  * source list. CSP source expressions MUST be space-separated; operators may
@@ -73,12 +89,49 @@ export interface CookieConfig {
   secure: boolean;
 }
 
+export type EmailMode = 'live' | 'capture' | 'disabled';
+
+export interface EmailConfig {
+  /**
+   * Resolved sending mode (research D1):
+   *   - `live`     — EMAIL_ENABLED and RESEND_API_KEY present → ResendMailer.
+   *   - `capture`  — EMAIL_ENABLED but no key, or EMAIL_TRANSPORT=capture →
+   *                  CaptureMailer (dev/test stub, US5/SC-003).
+   *   - `disabled` — EMAIL_ENABLED=false → no emails; accounts auto-confirm
+   *                  (FR-016) and the drainer is not started.
+   */
+  mode: EmailMode;
+  /** `RESEND_API_KEY` (production sender credential; undefined when unset). */
+  resendApiKey: string | undefined;
+  /** `RESEND_FROM` (verified sender address; falls back to a default in the mailer). */
+  resendFrom: string | undefined;
+  /**
+   * Public base origin used to build the confirmation/invite links
+   * (D9). Normalized (no trailing slash); defaults to the Docker deployment's
+   * public URL when unset.
+   */
+  publicOrigin: string;
+  /** Max delivery attempts per outbox row before it is marked `failed` (FR-018). */
+  maxAttempts: number;
+  /** Base backoff (ms); a row's Nth retry waits `retryBaseMs * 2^(N-1)` (FR-017). */
+  retryBaseMs: number;
+  /** Drainer polling interval (ms). */
+  drainIntervalMs: number;
+  /** Outbox rows claimed per drain cycle. */
+  drainBatch: number;
+  /** Verification-token TTL in hours (FR-010). */
+  tokenTtlHours: number;
+  /** Max verification emails per account per 24 h (FR-003). */
+  resendMaxPerAccount: number;
+}
+
 export interface Config {
   isProduction: boolean;
   rateLimit: RateLimitConfig;
   session: SessionConfig;
   jwt: { secret: string | undefined; minLength: number };
   cookies: CookieConfig;
+  email: EmailConfig;
   corsOrigins: string[] | undefined;
   /** CSP `font-src` permitted origin (FR-004). Defaults to the app's font host. */
   cspFontOrigin: string;
@@ -113,6 +166,48 @@ export function loadConfig(): Config {
     maxAgeDays: toInt(process.env.SESSION_MAX_AGE_DAYS, 30),
   };
 
+  // Email-integration feature (004). The sending mode is derived from the
+  // operator's intent (EMAIL_ENABLED) plus the presence of a live credential
+  // (RESEND_API_KEY), with EMAIL_TRANSPORT=capture as an explicit override:
+  //   - disabled  → EMAIL_ENABLED=false
+  //   - capture   → enabled but no key, OR EMAIL_TRANSPORT=capture
+  //   - live      → enabled AND a key present
+  const emailEnabled = toBool(process.env.EMAIL_ENABLED, true);
+  const resendApiKey =
+    process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim() !== ''
+      ? process.env.RESEND_API_KEY.trim()
+      : undefined;
+  const forceCapture =
+    process.env.EMAIL_TRANSPORT === 'capture' || process.env.EMAIL_TRANSPORT === 'test';
+
+  let emailMode: EmailMode;
+  if (!emailEnabled) {
+    emailMode = 'disabled';
+  } else if (forceCapture || !resendApiKey) {
+    emailMode = 'capture';
+  } else {
+    emailMode = 'live';
+  }
+
+  const email: EmailConfig = {
+    mode: emailMode,
+    resendApiKey,
+    resendFrom:
+      process.env.RESEND_FROM && process.env.RESEND_FROM.trim() !== ''
+        ? process.env.RESEND_FROM.trim()
+        : undefined,
+    publicOrigin: normalizeOrigin(
+      process.env.GIFTY_PUBLIC_ORIGIN,
+      'http://localhost:8080',
+    ),
+    maxAttempts: toInt(process.env.EMAIL_MAX_ATTEMPTS, 5),
+    retryBaseMs: toInt(process.env.EMAIL_RETRY_BASE_MS, 60_000),
+    drainIntervalMs: toInt(process.env.EMAIL_DRAIN_INTERVAL_MS, 5_000),
+    drainBatch: toInt(process.env.EMAIL_DRAIN_BATCH, 50),
+    tokenTtlHours: toInt(process.env.EMAIL_TOKEN_TTL_HOURS, 24),
+    resendMaxPerAccount: toInt(process.env.RESEND_MAX_PER_ACCOUNT, 3),
+  };
+
   const corsOrigins = process.env.CORS_ORIGINS
     ?.split(',')
     .map((s) => s.trim())
@@ -131,6 +226,7 @@ export function loadConfig(): Config {
       refreshName: 'gifty_refresh',
       secure: isProduction,
     },
+    email,
     corsOrigins,
     // FR-004: the app's font source (the Vite build serves the Google Fonts
     // stylesheet + woff2 binaries). Operator-overridable; both the font
@@ -216,6 +312,29 @@ export function validateConfig(): void {
             `"${value}"; set an explicit, operator-supplied POSTGRES_PASSWORD`,
         );
       }
+    }
+
+    // Feature 004 (email integration): in production, if the operator has
+    // enabled email delivery but no live Resend credential is configured, the
+    // app MUST refuse to boot — it would otherwise silently emit confirmation
+    // links that can never be delivered. The message names the offending key
+    // and the remedy (FR-009). An explicit EMAIL_TRANSPORT=capture override
+    // is an operator's deliberate choice and does not gate.
+    const emailEnabled = toBool(process.env.EMAIL_ENABLED, true);
+    const resendApiKey =
+      process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim() !== ''
+        ? process.env.RESEND_API_KEY
+        : undefined;
+    const forceCapture =
+      process.env.EMAIL_TRANSPORT === 'capture' ||
+      process.env.EMAIL_TRANSPORT === 'test';
+
+    if (emailEnabled && !resendApiKey && !forceCapture) {
+      errors.push(
+        'EMAIL_ENABLED is true but RESEND_API_KEY is not set; ' +
+          'set RESEND_API_KEY to a valid Resend key (or set EMAIL_ENABLED=false ' +
+          'to auto-confirm accounts and skip email delivery)',
+      );
     }
   }
 

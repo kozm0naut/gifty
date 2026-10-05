@@ -31,6 +31,10 @@ beforeEach(() => {
   savedEnv = { ...process.env };
   process.env.NODE_ENV = 'production';
   process.env.JWT_SECRET = 'test-secret-32-characters-long-0000';
+  // Feature 004: these cases exercise 5xx hygiene, not the email boot gate —
+  // disable email so the production email gate (EMAIL_ENABLED + RESEND_API_KEY)
+  // does not trip.
+  process.env.EMAIL_ENABLED = 'false';
   // Register the 5xx probe route; tighten the per-source sign-in budget (fast 429).
   // FR-001 invariant: register budget must stay strictly below the login budget.
   process.env.GIFTY_ENABLE_TEST_PROBES = '1';

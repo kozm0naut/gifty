@@ -28,6 +28,11 @@ export const AUDIT_ACTIONS = [
   'session_reuse_detected',
   'consent_updated',
   'invitation_matched',
+  // Feature 004 (email integration) — production + terminal delivery outcome (D7):
+  'email_invite_queued',
+  'email_confirmation_queued',
+  'email_delivered',
+  'email_failed',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
