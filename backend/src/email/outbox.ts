@@ -75,11 +75,23 @@ export async function enqueueInvite(
 /**
  * Enqueue a confirmation email. `listId` is NULL, so the unique constraint does
  * not apply and each (re)send produces a new row (FR-011).
+ *
+ * Re-issuing supersedes any prior queued/sending confirmation for the same
+ * user: the old token is invalid (the new hash overwrites it), so delivering
+ * that email would be misleading — mark it `superseded` (terminal) and skip.
  */
 export async function enqueueConfirmation(
   tx: Prisma.TransactionClient,
   input: { userId: string; recipientEmail: string; subject: string; bodyText: string; bodyHtml?: string },
 ): Promise<EnqueueResult> {
+  await tx.outboxMessage.updateMany({
+    where: {
+      kind: 'confirmation',
+      userId: input.userId,
+      status: { in: ['queued', 'sending'] },
+    },
+    data: { status: 'superseded', supersededAt: new Date() },
+  });
   const row = await tx.outboxMessage.create({
     data: {
       kind: 'confirmation',
@@ -160,7 +172,7 @@ async function processRow(id: string, retryBaseMs: number, maxAttempts: number):
     await mailer.send(msg.recipientEmail, msg.subject, msg.bodyText, msg.bodyHtml ?? undefined, meta);
     await prisma.outboxMessage.update({
       where: { id },
-      data: { status: 'sent', sentAt: new Date(), attempts: { increment: 0 } },
+      data: { status: 'sent', sentAt: new Date(), attempts: { increment: 1 } },
     });
     recordAuditEvent({
       actorUserId: msg.userId,
@@ -177,7 +189,12 @@ async function processRow(id: string, retryBaseMs: number, maxAttempts: number):
     if (terminal) {
       await prisma.outboxMessage.update({
         where: { id },
-        data: { status: 'failed', lastError: errorClass, lastAttemptAt: new Date() },
+        data: {
+          status: 'failed',
+          attempts: nextAttempts,
+          lastError: errorClass,
+          lastAttemptAt: new Date(),
+        },
       });
       recordAuditEvent({
         actorUserId: msg.userId,
@@ -218,19 +235,28 @@ export async function reclaimStaleSending(staleMs = 5 * 60 * 1000): Promise<numb
 
 let drainerTimer: NodeJS.Timeout | null = null;
 let draining = false;
+let inFlight: Promise<void> | null = null;
 
 async function tick(): Promise<void> {
   if (draining) return; // avoid overlapping cycles
   draining = true;
+  const work = (async () => {
+    try {
+      const { email } = loadConfig();
+      if (email.mode === 'disabled') return;
+      await reclaimStaleSending();
+      await drainOnce();
+    } catch (err) {
+      console.error('[email] drainer tick failed:', err instanceof Error ? err.message : String(err));
+    } finally {
+      draining = false;
+    }
+  })();
+  inFlight = work;
   try {
-    const { email } = loadConfig();
-    if (email.mode === 'disabled') return;
-    await reclaimStaleSending();
-    await drainOnce();
-  } catch (err) {
-    console.error('[email] drainer tick failed:', err instanceof Error ? err.message : String(err));
+    await work;
   } finally {
-    draining = false;
+    if (inFlight === work) inFlight = null;
   }
 }
 
@@ -249,10 +275,14 @@ export function startDrainer(): void {
   (drainerTimer as { unref?: () => void }).unref?.();
 }
 
-/** Stop the drainer (graceful shutdown). Idempotent. */
-export function stopDrainer(): void {
+/**
+ * Stop the drainer (graceful shutdown). Idempotent. Awaits any in-flight tick
+ * so no send is abandoned mid-flight on shutdown.
+ */
+export async function stopDrainer(): Promise<void> {
   if (drainerTimer) {
     clearInterval(drainerTimer);
     drainerTimer = null;
   }
+  if (inFlight) await inFlight.catch(() => undefined);
 }

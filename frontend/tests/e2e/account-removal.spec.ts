@@ -52,8 +52,8 @@ test.describe('Account removal (US7)', () => {
     await expect(page).toHaveURL(/\/me$/);
 
     // Danger action with an explicit, finality-naming confirmation.
-    await page.getByRole('button', { name: /remove account/i }).click();
-    const confirm = page.getByRole('button', { name: /permanently remove account/i });
+    await page.getByRole('button', { name: /delete account/i }).click();
+    const confirm = page.getByRole('button', { name: /permanently delete account/i });
     await expect(confirm).toBeVisible();
     await expect(confirm).toContainText(/permanently/i);
     await confirm.click();

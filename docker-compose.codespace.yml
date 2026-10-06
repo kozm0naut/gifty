@@ -56,6 +56,12 @@ services:
       DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD}@127.0.0.1:5432/gifty?schema=public
       # Required — injected from .env at `up` time; no default is permitted.
       JWT_SECRET: ${JWT_SECRET}
+      # Feature 004 (email integration) — boot gate (validateConfig, US5/FR-009).
+      # Operator-supplied, no defaults (mirrors JWT_SECRET). See docker-compose.yml.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-}
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
     depends_on:
       postgres:
         condition: service_healthy

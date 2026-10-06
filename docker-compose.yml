@@ -49,6 +49,19 @@ services:
       # CSP_FONT_ORIGIN — CSP font-src permitted origin(s); default = Google Fonts.
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       CSP_FONT_ORIGIN: ${CSP_FONT_ORIGIN:-}
+      # Feature 004 (email integration) — boot gate (validateConfig, US5/FR-009):
+      # in production the app refuses to boot if email is enabled but no live
+      # Resend credential is present (it would emit links that can never be
+      # delivered). These are operator-supplied, no defaults (mirrors JWT_SECRET):
+      #   RESEND_API_KEY  — REQUIRED for live mode; empty = capture/disabled gate.
+      #   RESEND_FROM     — REQUIRED for live mode (must be a valid email); blank is
+      #                     allowed in capture mode and in disabled mode (EMAIL_ENABLED=false).
+      #   EMAIL_ENABLED   — optional override; empty = default true.
+      #   EMAIL_TRANSPORT — optional override; 'capture'/'test' = dev/test stub.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-}
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
     ports:
       - "${PORT:-8080}:4000"
     depends_on:

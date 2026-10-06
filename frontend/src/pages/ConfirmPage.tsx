@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { BrandMark } from '../components/BrandMark';
 
@@ -13,7 +13,8 @@ import { BrandMark } from '../components/BrandMark';
  *
  * States (T021):
  *  - initializing            → wait for the cookie-backed bootstrap.
- *  - verified                → redirect to the dashboard (gate lifted).
+ *  - verified                → success message + short auto-redirect to the
+ *                              dashboard (gate lifted).
  *  - unconfirmed + session   → "a link is on its way" + expiry note + resend.
  *  - unconfirmed + no session→ cold visit (dead/expired link, fresh browser):
  *                              sign-in prompt (resend needs a session).
@@ -29,11 +30,12 @@ export function ConfirmPage() {
   const [resendError, setResendError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const email = useAuth().user?.email;
+  const navigate = useNavigate();
 
   // Derive the display state from the live auth context whenever it settles.
   useEffect(() => {
     if (isInitializing) return;
-    if (isVerified) return; // → <Navigate> below
+    if (isVerified) return; // → success card below
     if (isAuthenticated) setState('unconfirmed');
     else setState('no-session');
   }, [isInitializing, isVerified, isAuthenticated]);
@@ -47,6 +49,14 @@ export function ConfirmPage() {
   useEffect(() => {
     check();
   }, [check]);
+
+  // Once the account is verified, show the success message, then land in the
+  // app. The timer is cancelled if the user navigates away earlier.
+  useEffect(() => {
+    if (!isVerified) return;
+    const t = window.setTimeout(() => navigate('/', { replace: true }), 3000);
+    return () => window.clearTimeout(t);
+  }, [isVerified, navigate]);
 
   const handleResend = async () => {
     setBusy(true);
@@ -75,15 +85,33 @@ export function ConfirmPage() {
   }
 
   if (isVerified) {
-    // Email confirmed — the gate is lifted. Land in the app.
-    return <Navigate to="/" replace />;
+    // Email confirmed — the gate is lifted. Show a brief success confirmation,
+    // then land in the app (the auto-redirect timer above handles that).
+    return (
+      <div className="confirm-page confirm-page--center">
+        <div className="confirm-card">
+          <BrandMark className="confirm-brand" />
+          <h1 className="confirm-title">You're confirmed!</h1>
+          <p className="confirm-body" data-testid="confirm-success">
+            Thanks for confirming your email.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary confirm-resend"
+            onClick={() => navigate('/', { replace: true })}
+          >
+            Go to your lists
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // No live session (cold visit to a dead/expired link in a fresh browser).
   if (state === 'no-session') {
     return (
       <div className="confirm-page confirm-page--center">
-        <div className="confirm-card card card-pad">
+        <div className="confirm-card">
           <BrandMark className="confirm-brand" />
           <h1 className="confirm-title">Confirm your email</h1>
           <p className="confirm-body">
@@ -101,20 +129,18 @@ export function ConfirmPage() {
   // Unconfirmed with a live session: the main confirmation screen.
   return (
     <div className="confirm-page confirm-page--center">
-      <div className="confirm-card card card-pad">
+      <div className="confirm-card">
         <BrandMark className="confirm-brand" />
         <h1 className="confirm-title">Confirm your email</h1>
-        <p className="confirm-body">
-          A link is on its way to{' '}
-          <span className="confirm-email" data-testid="confirm-email">
-            {email || 'your inbox'}
-          </span>
-          .
-        </p>
+        <p className="confirm-body">A link is on its way to</p>
+        <span className="confirm-email" data-testid="confirm-email">
+          {email || 'your inbox'}
+        </span>
 
         <p className="confirm-note">
-          Confirmation links expire after 24 hours. If your link isn't working,
-          resend a new one.
+          Confirmation links expire after 24 hours.
+          <br />
+          If your link isn't working, resend a new one.
         </p>
 
         <button
@@ -128,12 +154,6 @@ export function ConfirmPage() {
 
         {resendMsg && <p className="confirm-msg confirm-msg--ok">{resendMsg}</p>}
         {resendError && <p className="confirm-msg confirm-msg--err" role="alert">{resendError}</p>}
-
-        <div className="confirm-actions">
-          <Link to="/auth" className="confirm-link">
-            Open the app
-          </Link>
-        </div>
       </div>
     </div>
   );

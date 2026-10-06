@@ -103,7 +103,7 @@ export interface EmailConfig {
   mode: EmailMode;
   /** `RESEND_API_KEY` (production sender credential; undefined when unset). */
   resendApiKey: string | undefined;
-  /** `RESEND_FROM` (verified sender address; falls back to a default in the mailer). */
+  /** `RESEND_FROM` (verified sender address; required in live mode — boot gate; optional in capture/disabled). */
   resendFrom: string | undefined;
   /**
    * Public base origin used to build the confirmation/invite links
@@ -334,6 +334,33 @@ export function validateConfig(): void {
         'EMAIL_ENABLED is true but RESEND_API_KEY is not set; ' +
           'set RESEND_API_KEY to a valid Resend key (or set EMAIL_ENABLED=false ' +
           'to auto-confirm accounts and skip email delivery)',
+      );
+    }
+
+    // FR-009 (continued): in live mode (enabled + key + no capture override)
+    // the sender address MUST be a valid email — Resend rejects the request
+    // otherwise (422 validation_error). Name the offending key and the remedy.
+    const resendFrom =
+      process.env.RESEND_FROM && process.env.RESEND_FROM.trim() !== ''
+        ? process.env.RESEND_FROM.trim()
+        : undefined;
+    // Resend accepts either `email@domain` or `Name <email@domain>` (422
+    // validation_error otherwise). Validate the actual address: extract it from
+    // the `<...>` when present, else treat the whole value as the address.
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    let fromAddress: string | undefined;
+    if (resendFrom) {
+      const m = resendFrom.match(/<([^<>\s]+@[^<>\s]+)>/);
+      fromAddress = m ? m[1] : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(resendFrom) ? resendFrom : undefined;
+    }
+    if (emailEnabled && resendApiKey && !forceCapture && !fromAddress) {
+      errors.push(
+        resendFrom
+          ? `RESEND_FROM is set to "${resendFrom}" which is not a valid email address; ` +
+            'set RESEND_FROM to a verified address (e.g. no-reply@example.com or ' +
+            '"Gifty <no-reply@example.com>")'
+          : 'RESEND_FROM is not set; set RESEND_FROM to a verified sending address ' +
+            '(e.g. no-reply@example.com or "Gifty <no-reply@example.com>")',
       );
     }
   }

@@ -36,14 +36,12 @@ function buildInviteContent(ownerDisplayName: string | null | undefined) {
   const name = ownerDisplayName || 'Someone';
   const bodyText =
     `${name} shared their Gifty gift list with you.\n` +
-    `Open the list: ${link}\n` +
-    `You don't need an account to view a shared list. If you'd like to claim or manage items, ` +
-    `you can sign in or create an account at ${link}.`;
+    `Open Gifty: ${link}\n` +
+    `Sign in (or create an account) to view the shared list.`;
   const bodyHtml =
     `<p>${escapeHtml(name)} shared their Gifty gift list with you.</p>` +
-    `<p><a href="${escapeHtml(link)}">Open the list</a></p>` +
-    `<p>You don't need an account to view a shared list. If you'd like to claim or manage items, ` +
-    `you can sign in or create an account at <a href="${escapeHtml(link)}">Gifty</a>.</p>`;
+    `<p><a href="${escapeHtml(link)}">Open Gifty</a></p>` +
+    `<p>Sign in (or create an account) to view the shared list.</p>`;
   return { subject, bodyText, bodyHtml };
 }
 

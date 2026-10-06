@@ -9,7 +9,7 @@ import { BrandMark } from '../components/BrandMark';
  * T049 [US7] — Account area (FR-014 / FR-028).
  *
  * Shows the signed-in user's profile and offers a single, explicit,
- * IRREVERSIBLE "Remove account" action. The confirmation names the finality —
+ * IRREVERSIBLE "Delete account" action. The confirmation names the finality —
  * owned lists permanently deleted, claims on others' lists cleared — and makes
  * clear there is no grace period and no undo. On success the session is ended
  * and the user lands on the sign-in page. No "undo" / "restore" affordance is
@@ -60,9 +60,9 @@ export function AccountPage() {
 
       <section className="section-gap">
         <div className="card card-pad account-danger">
-          <h2 className="section-title">Danger zone</h2>
+          <h2 className="section-title">Delete account</h2>
           <p className="muted account-danger-desc">
-            Removing your account is permanent. This action cannot be undone.
+            Deleting your account is permanent. This action cannot be undone.
           </p>
           {error && (
             <div className="alert alert-error" role="alert">
@@ -78,13 +78,13 @@ export function AccountPage() {
               setShowConfirm(true);
             }}
           >
-            {working ? 'Removing…' : 'Remove account'}
+            {working ? 'Deleting…' : 'Delete account'}
           </button>
         </div>
       </section>
 
       {showConfirm && (
-        <Modal title="Remove account" onClose={() => !working && setShowConfirm(false)}>
+        <Modal title="Delete account" onClose={() => !working && setShowConfirm(false)}>
           <div className="account-confirm">
             <p>
               This <strong>permanently deletes</strong> your Gifty account. The
@@ -120,7 +120,7 @@ export function AccountPage() {
                 disabled={working}
                 onClick={handleRemove}
               >
-                {working ? 'Removing…' : 'Permanently remove account'}
+                {working ? 'Deleting…' : 'Permanently delete account'}
               </button>
             </div>
           </div>

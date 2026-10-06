@@ -61,8 +61,11 @@ export class ResendMailer implements Mailer {
     if (!email.resendApiKey) {
       throw new Error('ResendMailer is active but RESEND_API_KEY is not configured');
     }
+    if (!email.resendFrom) {
+      throw new Error('ResendMailer requires RESEND_FROM to be configured');
+    }
     const body: Record<string, unknown> = {
-      from: email.resendFrom ?? 'no-reply@gifty',
+      from: email.resendFrom,
       to: [to],
       subject,
       text,

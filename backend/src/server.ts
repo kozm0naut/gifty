@@ -31,12 +31,15 @@ void (async () => {
     startDrainer();
   });
 
-  // Graceful shutdown: stop the drainer so it does not keep the process alive
-  // and no further delivery cycles are started.
+  // Graceful shutdown: stop the drainer (awaiting in-flight sends) so no
+  // delivery cycle is abandoned, then let connections drain.
   const shutdown = (signal: string) => {
     console.log(`[server] ${signal} received, shutting down`);
-    stopDrainer();
-    server.close(() => process.exit(0));
+    void stopDrainer()
+      .catch((err) => console.error('[server] drainer stop failed:', err instanceof Error ? err.message : String(err)))
+      .then(() => {
+        server.close(() => process.exit(0));
+      });
     // Hard exit if connections do not drain in a reasonable time.
     setTimeout(() => process.exit(0), 5_000).unref();
   };

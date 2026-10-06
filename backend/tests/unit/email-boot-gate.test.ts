@@ -118,12 +118,58 @@ describe('email boot gate — production + enabled + no key (FR-009 / SC-006)', 
 });
 
 describe('email boot gate — production + enabled + valid key (US6 scenario 2)', () => {
-  it('boots with a configured live sender', () => {
+  it('boots with a configured live sender (key + from)', () => {
     process.env.EMAIL_ENABLED = 'true';
     process.env.RESEND_API_KEY = RESEND_KEY;
+    process.env.RESEND_FROM = RESEND_FROM;
     expect(() => validateConfig()).not.toThrow();
     // Mode (a): enabled + live sender.
     expect(loadConfig().email.mode).toBe('live');
+  });
+});
+
+describe('email boot gate — production + live mode requires RESEND_FROM (FR-009)', () => {
+  it('refuses to boot when key is set but RESEND_FROM is missing', () => {
+    process.env.EMAIL_ENABLED = 'true';
+    process.env.RESEND_API_KEY = RESEND_KEY;
+    delete process.env.RESEND_FROM;
+    expect(() => validateConfig()).toThrowError(/RESEND_FROM/);
+    expect(() => validateConfig()).toThrowError(/set RESEND_FROM/);
+  });
+
+  it('refuses to boot when RESEND_FROM is not a valid email', () => {
+    process.env.EMAIL_ENABLED = 'true';
+    process.env.RESEND_API_KEY = RESEND_KEY;
+    process.env.RESEND_FROM = 'not-an-email';
+    expect(() => validateConfig()).toThrowError(/RESEND_FROM/);
+    expect(() => validateConfig()).toThrowError(/not a valid email address/);
+  });
+
+  it('boots when RESEND_FROM is a valid address', () => {
+    process.env.EMAIL_ENABLED = 'true';
+    process.env.RESEND_API_KEY = RESEND_KEY;
+    process.env.RESEND_FROM = 'no-reply@example.com';
+    expect(() => validateConfig()).not.toThrow();
+    expect(loadConfig().email.mode).toBe('live');
+  });
+
+  it('boots when RESEND_FROM uses the display-name form "Name <email>"', () => {
+    process.env.EMAIL_ENABLED = 'true';
+    process.env.RESEND_API_KEY = RESEND_KEY;
+    process.env.RESEND_FROM = 'Gifty <no-reply@gifty.example>';
+    expect(() => validateConfig()).not.toThrow();
+    expect(loadConfig().email.mode).toBe('live');
+  });
+
+  it('does NOT gate RESEND_FROM in capture mode', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.JWT_SECRET = 'short';
+    process.env.EMAIL_ENABLED = 'true';
+    process.env.EMAIL_TRANSPORT = 'capture';
+    delete process.env.RESEND_API_KEY;
+    delete process.env.RESEND_FROM;
+    expect(() => validateConfig()).not.toThrow();
+    expect(loadConfig().email.mode).toBe('capture');
   });
 });
 
