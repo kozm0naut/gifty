@@ -141,11 +141,11 @@
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T026 [P] [US5] Write `backend/tests/capture-mode.test.ts`: (1) invite email captured → `capturedEmails()` contains entry with correct `to`, `subject`, `text`, `link` (home page, no token); (2) confirmation email captured → entry with `/confirm?token=` link; (3) zero live provider calls (no fetch to `api.resend.com` — assert via mock or absence of RESEND_API_KEY); (4) `resetCapturedEmails()` clears the buffer; (5) `drainOnce()` processes captured messages (status → `sent`); (6) `setMailerForTest(fakeMailer)` injection works (fake succeeds / fails N times / always fails)
+- [x] T026 [P] [US5] Write `backend/tests/capture-mode.test.ts`: (1) invite email captured → `capturedEmails()` contains entry with correct `to`, `subject`, `text`, `link` (home page, no token); (2) confirmation email captured → entry with `/confirm?token=` link; (3) zero live provider calls (no fetch to `api.resend.com` — assert via mock or absence of RESEND_API_KEY); (4) `resetCapturedEmails()` clears the buffer; (5) `drainOnce()` processes captured messages (status → `sent`); (6) `setMailerForTest(fakeMailer)` injection works (fake succeeds / fails N times / always fails)
 
 ### Implementation for User Story 5
 
-- [ ] T027 [US5] Verify `backend/src/email/mailer.ts` CaptureMailer: zero network I/O by construction (no fetch, no HTTP); `capturedEmails()` returns the in-memory ring buffer; `resetCapturedEmails()` clears it; both hooks are only active when `EMAIL_TRANSPORT=capture` (or in test environment) — never in production (mirrors `GIFTY_ENABLE_TEST_PROBES` discipline); each captured entry logs to process output in a stable greppable shape (e.g. `[capture] invite → guest@example.com: "You've been shared a gift list"`); verify `getMailer()` resolves to CaptureMailer in mode (b) and ResendMailer in mode (a)
+- [x] T027 [US5] Verify `backend/src/email/mailer.ts` CaptureMailer: zero network I/O by construction (no fetch, no HTTP); `capturedEmails()` returns the in-memory ring buffer; `resetCapturedEmails()` clears it; both hooks are only active when `EMAIL_TRANSPORT=capture` (or in test environment) — never in production (mirrors `GIFTY_ENABLE_TEST_PROBES` discipline); each captured entry logs to process output in a stable greppable shape (e.g. `[capture] invite → guest@example.com: "You've been shared a gift list"`); verify `getMailer()` resolves to CaptureMailer in mode (b) and ResendMailer in mode (a)
 
 **Checkpoint**: US5 fully functional — capture mode produces expected messages, zero live calls, test hooks work
 
@@ -161,11 +161,11 @@
 
 > (Test file already written in T002a as part of Foundational, test-first)
 
-- [ ] T028 [US6] Verify `backend/src/config/index.ts` `validateConfig()`: production + `EMAIL_ENABLED=true` + no `RESEND_API_KEY` → throws with message naming `RESEND_API_KEY` and the fix (FR-009, SC-006); production + enabled + valid key + `RESEND_FROM` → boots (mode a); production + disabled → boots + emits startup warning `[config] email disabled — new accounts are auto-confirmed; live delivery is off.` (FR-015, SC-010); non-production + no key → resolves to capture mode (mode b), boots normally; verify the startup warning is emitted at the correct level (warning, not error) and states both facts (email disabled + auto-confirmed)
+- [x] T028 [US6] Verify `backend/src/config/index.ts` `validateConfig()`: production + `EMAIL_ENABLED=true` + no `RESEND_API_KEY` → throws with message naming `RESEND_API_KEY` and the fix (FR-009, SC-006); production + enabled + valid key + `RESEND_FROM` → boots (mode a); production + disabled → boots + emits startup warning `[config] email disabled — new accounts are auto-confirmed; live delivery is off.` (FR-015, SC-010); non-production + no key → resolves to capture mode (mode b), boots normally; verify the startup warning is emitted at the correct level (warning, not error) and states both facts (email disabled + auto-confirmed)
 
 ### Implementation for User Story 6
 
-- [ ] T029 [US6] Verify `backend/src/app.ts` startup logging: on boot, log the resolved email mode (e.g. `[email] mode: live (resend)`, `[email] mode: capture (dev/test)`, `[email] mode: disabled (auto-confirm)`); in disabled mode, the register path auto-confirms (`verifiedAt = now`, no token, no enqueue) — verify the `backend/src/auth/router.ts` register handler checks the mode and branches correctly
+- [x] T029 [US6] Verify `backend/src/app.ts` startup logging: on boot, log the resolved email mode (e.g. `[email] mode: live (resend)`, `[email] mode: capture (dev/test)`, `[email] mode: disabled (auto-confirm)`); in disabled mode, the register path auto-confirms (`verifiedAt = now`, no token, no enqueue) — verify the `backend/src/auth/router.ts` register handler checks the mode and branches correctly
 
 **Checkpoint**: US6 fully functional — boot gate, mode resolution, startup warning, auto-confirm all working
 
