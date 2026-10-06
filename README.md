@@ -101,6 +101,29 @@ budgets, secret-strength, session lifetime) are optional with safe defaults and
 are documented in **[docs/docker.md](docs/docker.md) §8**. `npm run audit`
 (= `audit:prod`) is the blocking CI / release gate for the supply chain.
 
+## Email
+
+Gifty sends two kinds of email — a **confirmation** link for new accounts and an
+**invite** when a list is shared. Delivery is queued through a durable
+`OutboxMessage` table and drained by a worker (at-least-once, retry with
+backoff, then a terminal `failed` status). How messages are actually sent has
+three modes:
+
+- **live** — `EMAIL_ENABLED=true` (default) + `RESEND_API_KEY` set: real email via
+  Resend. The only mode that touches the network.
+- **capture** — `EMAIL_TRANSPORT=capture` (or enabled with no key): a **dev/test
+  stub with zero network I/O**. Messages are logged and persisted exactly like
+  live mode but never leave the process. This is the default for local dev and CI,
+  so set `EMAIL_TRANSPORT=capture` to keep real email off even with a live key.
+- **disabled** — `EMAIL_ENABLED=false`: no email and no confirmation gate; new
+  accounts are **auto-confirmed**.
+
+The production boot gate refuses to start if email is enabled but
+`RESEND_API_KEY` (and, in live mode, a valid `RESEND_FROM`) is missing — a
+production app will not silently emit links it can never deliver. Full variable
+reference (`RESEND_*`, `GIFTY_PUBLIC_ORIGIN`, `EMAIL_MAX_ATTEMPTS`, retry/drain
+tuning, token TTL) is in **[docs/docker.md](docs/docker.md) §9**.
+
 ## Repository layout
 
 ```text

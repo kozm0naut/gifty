@@ -2,6 +2,7 @@ import { test, expect, BrowserContext } from '@playwright/test';
 import {
   E2E_PASSWORD,
   apiCreateList,
+  confirmAccountIfUnverified,
   logoutViaUI,
   uniqueEmail,
 } from './helpers';
@@ -64,6 +65,10 @@ async function harnessLogin(email: string, password: string, displayName: string
   const setCookie = loginRes.headers.get('set-cookie') || '';
   const cookies = parseSessionCookies(setCookie);
   const data = (await loginRes.json()) as { user: { id: string; email: string; displayName: string } };
+  // Email is enabled (capture mode): registration yields an unconfirmed account
+  // and the dashboard (gated routes) 403s until it confirms. Confirm here so the
+  // session-lifecycle flows these tests exercise start from a usable account.
+  await confirmAccountIfUnverified(email, `gifty_access=${cookies.access}`);
   return { user: data.user, cookies, setCookieHeader: setCookie };
 }
 

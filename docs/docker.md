@@ -197,3 +197,60 @@ credential is a known default — each failure message names the offending value
   *moderate* advisories (CVE-2026-53666 / CVE-2026-53669) are explicitly accepted — they
   are fixed only in `react-router` v7 (a breaking major bump) and are out of scope for the
   "zero high/critical" success criterion.
+
+## 9. Email delivery (spec 004)
+
+Gifty sends two kinds of email — a **confirmation** link for new accounts and an
+**invite** when a list is shared. Delivery is queued through a durable
+`OutboxMessage` table and drained by an in-process worker (at-least-once,
+retry with exponential backoff, then a terminal `failed` status). How a message
+is actually sent is set by **three sending modes**:
+
+| Mode | How it resolves | What it does |
+|------|-----------------|--------------|
+| **live** | `EMAIL_ENABLED=true` (default) **and** `RESEND_API_KEY` set **and** no capture override | Sends real email via Resend (`RESEND_FROM` is the verified sender). The only mode that touches the network. |
+| **capture** | `EMAIL_TRANSPORT=capture` (or `test`), **or** enabled with no `RESEND_API_KEY` | **Dev/test stub — zero network I/O.** Each message is logged and persisted to the outbox exactly like live mode, but never leaves the process. The blocking confirmation gate still applies (accounts must follow the captured link). This is the safe default for local dev and CI. |
+| **disabled** | `EMAIL_ENABLED=false` | No email is produced and no confirmation gate is enforced — new accounts are **auto-confirmed** at registration. The drainer is not started. |
+
+The resolved mode is surfaced in the startup log, e.g. `[email] mode: capture (dev/test)`
+or `[email] mode: live (resend)`.
+
+> **Important:** capture mode is how the Docker dev/CI stacks run by default
+> (see the quickstart). It means you will **never** see real email in a browser
+> inbox — "the email was sent" means the message appears in the process output
+> and the `OutboxMessage` table. Set `EMAIL_TRANSPORT=capture` explicitly to force
+> capture even when a live `RESEND_API_KEY` is present.
+
+### Email configuration
+
+All of these are optional — sensible defaults apply (shown). Only the live-mode
+credentials matter for a real deployment.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `EMAIL_ENABLED` | `true` | Master switch. `false` → **disabled** mode (no email, accounts auto-confirmed). |
+| `EMAIL_TRANSPORT` | *(unset)* | Explicit override. Set to `capture` (or `test`) to force the capture stub even with a live key — the safe dev/CI choice. |
+| `RESEND_API_KEY` | *(none)* | Live-mode sender credential. Required for **live** mode; its absence (in production) trips the boot gate below. |
+| `RESEND_FROM` | *(none)* | Verified sender address (e.g. `no-reply@example.com` or `"Gifty <no-reply@example.com>"`). Required and validated in live mode. |
+| `GIFTY_PUBLIC_ORIGIN` | `http://localhost:8080` | Base origin used to build the confirmation link (`{origin}/confirm?token=…`) and the invite link (`{origin}/`). Set it to your public URL in production so links are correct. |
+| `EMAIL_MAX_ATTEMPTS` | `5` | Delivery attempts per outbox row before it is marked `failed`. |
+| `EMAIL_RETRY_BASE_MS` | `60000` | Base retry backoff (ms); a row's *N*th retry waits `retryBaseMs * 2^(N-1)`. |
+| `EMAIL_DRAIN_INTERVAL_MS` | `5000` | How often the drainer polls for queued outbox rows. |
+| `EMAIL_DRAIN_BATCH` | `50` | Outbox rows claimed per drain cycle. |
+| `EMAIL_TOKEN_TTL_HOURS` | `24` | How long a confirmation token stays valid. |
+| `RESEND_MAX_PER_ACCOUNT` | `3` | Max confirmation **resend** requests per account per window (the window reuses `RATE_LIMIT_WINDOW_MINUTES`). |
+
+### Boot-gate behavior (production)
+
+The production boot gate (`validateConfig()`) enforces, in addition to the
+`JWT_SECRET` / `POSTGRES_PASSWORD` checks from §8:
+
+- **Production + email enabled + no `RESEND_API_KEY` (and no capture override)
+  → refuses to start**, naming `RESEND_API_KEY` and the fix. This prevents a
+  production app from silently emitting confirmation links that can never be
+  delivered. An explicit `EMAIL_TRANSPORT=capture` is treated as a deliberate
+  operator choice and does **not** gate.
+- **Live mode with a missing or invalid `RESEND_FROM` → refuses to start**,
+  naming `RESEND_FROM` (Resend would reject the request as `422 validation_error`).
+- **Disabled mode (`EMAIL_ENABLED=false`) always boots** — with a warning that new
+  accounts are auto-confirmed and live delivery is off.

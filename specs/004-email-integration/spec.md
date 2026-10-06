@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-03
 
-**Status**: Draft
+**Status**: Implemented (feature `004-email-integration` complete; all tasks T001–T035 in `tasks.md` marked `[x]`)
 
 **Input**: User description: "Integrate email-sending support into the project. Decouple the sender (a `Mailer` port) with Resend in prod and an output stub for dev/test. Use the transactional outbox. Extend `validateConfig()`. Scope: (1) account confirmation email with verification link; (2) a single invite email per (registered or unregistered) user per shared list — don't resend on repeat invitations."
 

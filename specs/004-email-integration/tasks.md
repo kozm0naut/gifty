@@ -175,12 +175,12 @@
 
 **Purpose**: Integration validation, regression, documentation
 
-- [ ] T030 [P] Write frontend e2e tests in `frontend/tests/e2e/`: (1) register → confirmation page → follow captured link → dashboard → verified; (2) unconfirmed account → gated at lists page → 403 → confirm → access granted; (3) disabled mode → register → immediately on dashboard (no gate); (4) invite email captured (process output check)
-- [ ] T031 [P] Run full backend regression: `cd backend; npm test` + `npx tsc -p tsconfig.json --noEmit` — all 001/003 suites MUST pass unchanged (SC-007)
-- [ ] T032 [P] Run full frontend regression: `cd frontend; npx vitest run` + `npx playwright test` (with `BASE_URL=http://localhost:8080`) — all existing e2e MUST pass
-- [ ] T033 Run quickstart.md validation scenarios (steps 3a–3c, US1–US6) against the running app (`npm run docker:up` → http://localhost:8080)
-- [ ] T034 [P] Update `docs/docker.md`: document the `EMAIL_*` environment variables and the three sending modes in the deployment documentation
-- [ ] T035 [P] Update `README.md`: add a short "Email" section documenting the three modes, the capture stub for dev/test, and the boot-gate behavior
+- [x] T030 [P] Write frontend e2e tests in `frontend/tests/e2e/`: (1) register → confirmation page → follow captured link → dashboard → verified; (2) unconfirmed account → gated at lists page → 403 → confirm → access granted; (3) disabled mode → register → immediately on dashboard (no gate); (4) invite email captured (process output check). **Note:** scenario (3) is gated behind `E2E_EMAIL_MODE=disabled` (skipped otherwise) — it is already proven at the API level by `backend/tests/confirmation.test.ts` (T015.14) since the live capture-mode stack cannot flip modes without a restart.
+- [x] T031 [P] Run full backend regression: `cd backend; npm test` + `npx tsc -p tsconfig.json --noEmit` — all 001/003 suites MUST pass unchanged (SC-007). **Result:** 233/233 passed, tsc clean.
+- [x] T032 [P] Run full frontend regression: `cd frontend; npx vitest run` + `npx playwright test` (with `BASE_URL=http://localhost:8080`) — all existing e2e MUST pass. **Result:** vitest 18/18; playwright 22 passed / 1 skipped (disabled-mode), tsc clean. `helpers.ts` `apiRegister` now auto-confirms unverified accounts via the captured token so pre-email specs keep passing against the capture-mode stack.
+- [x] T033 Run quickstart.md validation scenarios (steps 3a–3c, US1–US6) against the running app (`npm run docker:up` → http://localhost:8080). **Result:** US1 (invite home link, no token; per-list dedup), US2 (register→unconfirmed→403 gate→confirm→200→gate lifted→verified), US5 (confirmation + invite both captured, zero live calls) all verified live via `node scripts/quickstart-check.mjs` (exit 0). US3/US4 retry + terminal-failure and the US6 boot gates are covered by the backend unit suites (per quickstart step 5); 3c disabled mode proven by `confirmation.test.ts`.
+- [x] T034 [P] Update `docs/docker.md`: document the `EMAIL_*` environment variables and the three sending modes in the deployment documentation. **Result:** new §9 (three modes table, full `EMAIL_*`/`RESEND_*` variable reference, boot-gate behavior).
+- [x] T035 [P] Update `README.md`: add a short "Email" section documenting the three modes, the capture stub for dev/test, and the boot-gate behavior. **Result:** new "Email" section added before "Repository layout".
 
 ---
 
