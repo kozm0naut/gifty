@@ -10,13 +10,13 @@ export type AuthenticatedRequest = Request & {
 };
 
 /**
- * Feature 004 (US2, FR-012): gate authenticated routes on a confirmed email.
+ * Feature 004 (US2, 004 FR-012): gate authenticated routes on a confirmed email.
  *
  * Composed AFTER `requireAuth` (which populates `req.user`). The gate is a
  * no-op when the email feature is `disabled` (accounts auto-confirm), so a
  * single code path serves both modes. An unconfirmed caller (verifiedAt null)
  * receives a STABLE 403 body on every gated route — the message never varies
- * by route, so the surface does not reveal which endpoints exist (FR-010).
+ * by route, so the surface does not reveal which endpoints exist (004 FR-010).
  */
 export function requireConfirmed(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   if (loadConfig().email.mode === 'disabled') {
@@ -42,10 +42,10 @@ export function getJwtSecret(): string {
 }
 
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  // Feature 003 (US4 / T012 / T017 / SC-007): the `Authorization: Bearer`
+  // Feature 003 (US4 / T012 / T017 / 003 SC-007): the `Authorization: Bearer`
   // header and the legacy `token` bridge are formally RETIRED. The access
   // credential is now exclusively the script-unreadable `gifty_access`
-  // HttpOnly cookie (contracts/api.md, FR-009).
+  // HttpOnly cookie (contracts/api.md, 003 FR-009).
   const cookieToken = parseCookie(req.headers.cookie ?? '')[loadConfig().cookies.accessName];
 
   if (!cookieToken) {
@@ -61,7 +61,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
 
     // Cookie-backed access JWTs carry the `sid` claim — confirm the
     // UserSession row is live, rejecting revoked/expired sessions even before
-    // the token's own `exp` (FR-008).
+    // the token's own `exp` (003 FR-008).
     if (typeof payload.sid === 'string') {
       const resolved = await resolveSessionForAccess(cookieToken);
       if (!resolved || resolved.userId !== userId) {

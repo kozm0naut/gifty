@@ -2,13 +2,13 @@
  * Verification-token logic for the email-integration feature (research D4, D7).
  *
  * - 256-bit random tokens (`crypto.randomBytes(32)`) — high-entropy, not
- *   guessable (FR-009).
+ *   guessable (004 FR-010).
  * - Only the SHA-256 **hash** is persisted to `User.verificationTokenHash`;
  *   the raw token is returned once (to embed in the link) and never stored.
- * - Single use + 24 h TTL (FR-010, FR-027). `consumeToken` is atomic via the
+ * - Single use + 24 h TTL (004 FR-010). `consumeToken` is atomic via the
  *   unique `verificationTokenHash` column + an expiry check.
  * - Every failure mode (not found, expired, already used) is indistinguishable
- *   (SC-006): `consumeToken` returns a bare boolean with no reason codes.
+ *   (004 FR-010): `consumeToken` returns a bare boolean with no reason codes.
  */
 
 import { randomBytes, createHash } from 'crypto';
@@ -31,7 +31,7 @@ export function hashToken(raw: string): string {
  * (now + TTL), and the issue time are persisted; the raw token is not.
  *
  * Re-issuing (resend) replaces any prior unverified token — the new hash
- * overwrites the old, invalidating it (FR-010).
+ * overwrites the old, invalidating it (004 FR-010).
  */
 export async function issueToken(userId: string): Promise<string> {
   const ttlHours = loadConfig().email.tokenTtlHours;
@@ -55,7 +55,7 @@ export async function issueToken(userId: string): Promise<string> {
 /**
  * Consume a raw verification token. On success the account is marked verified
  * (single use — the stored hash is cleared). Returns `true` iff the token was
- * valid and unexpired. All failure modes are indistinguishable (SC-006).
+ * valid and unexpired. All failure modes are indistinguishable (004 FR-010).
  */
 export async function consumeToken(raw: string): Promise<boolean> {
   const hash = hashToken(raw);
@@ -71,7 +71,7 @@ export async function consumeToken(raw: string): Promise<boolean> {
 
   if (!user) return false; // not found / already used / not the token holder
   if (!user.verificationExpiresAt || user.verificationExpiresAt.getTime() <= now.getTime()) {
-    return false; // expired (FR-010)
+    return false; // expired (004 FR-010)
   }
 
   // Single use: mark verified and invalidate the token. (The `verifiedAt: null`

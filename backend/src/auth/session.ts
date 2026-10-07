@@ -8,12 +8,12 @@ import { loadConfig } from '../config/index.js';
  *
  * Responsibilities:
  *   - create a session on sign-in, storing only the **SHA-256 hash** of the
- *     refresh token (FR-013: raw tokens are never persisted);
+ *     refresh token (003 FR-013: raw tokens are never persisted);
  *   - issue a short-lived access JWT (≤ 1 h, default 10 min) with the `sid`
  *     claim (research D3);
  *   - rotate the refresh token on every refresh, recording the previous
- *     hash for one-step-back reuse detection (FR-026);
- *   - enforce the 30-day session cap and immediate revocation (FR-007/008).
+ *     hash for one-step-back reuse detection (003 FR-026);
+ *   - enforce the 30-day session cap and immediate revocation (003 FR-007/003 FR-008).
  *
  * Concurrency: `rotateSession` uses a conditional `updateMany`
  * (where `refreshTokenHash = oldHash`) so that concurrent presentations of
@@ -96,7 +96,7 @@ export async function rotateSession(
     return { ok: false, reason: 'expired' };
   }
 
-  // One-step-back reuse detection (FR-026): the presented token matches the
+  // One-step-back reuse detection (003 FR-026): the presented token matches the
   // *previous* hash, i.e. it has already been rotated out. Treat as a theft
   // signal — revoke the entire session family.
   if (row.previousRefreshHash === presentedHash) {
@@ -157,7 +157,7 @@ export async function revokeSession(sessionId: string): Promise<void> {
  *
  * Returns null when the token is missing/invalid/expired, the user is
  * gone, or the session row is revoked/expired — in any of those cases the
- * caller must reject the request with a 401 (FR-008).
+ * caller must reject the request with a 401 (003 FR-008).
  */
 export async function resolveSessionForAccess(
   accessToken: string | undefined,

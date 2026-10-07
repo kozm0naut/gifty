@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { validateConfig } from '../../src/config/index.js';
 
 /**
- * T022 — Boot-gate tests (US3, FR-005 / FR-006, SC-004).
+ * T022 — Boot-gate tests (US3, 003 FR-005 / 003 FR-006, 003 SC-004).
  *
  * The startup gate (`validateConfig()`) MUST, in a production context, refuse
  * to boot when the session-signing secret is missing / below the minimum
  * strength / a known default, or when the database credential is a known
  * default. Each refusal message MUST identify WHICH value failed and WHAT MUST
- * CHANGE so an operator can remediate without documentation (FR-005). Local
+ * CHANGE so an operator can remediate without documentation (003 FR-005). Local
  * development is NOT blocked by the production-only rules (edge case "Weak
  * secret in a non-production context").
  *
@@ -60,7 +60,7 @@ beforeEach(() => {
   delete process.env.POSTGRES_PASSWORD;
   delete process.env.JWT_SECRET_MIN_LENGTH;
   // Reset the rate-limit / session knobs to their built-in defaults so the
-  // FR-001/FR-007 cross-checks in validateConfig() cannot interfere.
+  // 003 FR-001/003 FR-007 cross-checks in validateConfig() cannot interfere.
   delete process.env.RATE_LIMIT_WINDOW_MINUTES;
   delete process.env.LOGIN_MAX_FAILURES_PER_SOURCE;
   delete process.env.REGISTER_MAX_FAILURES_PER_SOURCE;
@@ -86,11 +86,11 @@ afterEach(() => {
   }
 });
 
-describe('boot gate — production refusals (FR-005 / FR-006)', () => {
+describe('boot gate — production refusals (003 FR-005 / 003 FR-006)', () => {
   it('refuses to boot when JWT_SECRET is missing, naming the value and remedy', () => {
     delete process.env.JWT_SECRET;
     expect(() => validateConfig()).toThrowError(/JWT_SECRET/);
-    // The message must say what must change (FR-005).
+    // The message must say what must change (003 FR-005).
     expect(() => validateConfig()).toThrowError(/at least \d+ characters|must be set/i);
   });
 

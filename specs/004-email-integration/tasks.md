@@ -277,3 +277,17 @@ The minimum viable product is **US1 (invite email)** + **US2 (confirmation email
 - **Origin action blocked**: Enqueue is in the same transaction (T007), no delivery I/O in request path (FR-006, SC-007)
 - **Mode conflation**: Three modes derived from config (T008), never conflated (Assumptions)
 - **Existing suite breakage**: All 001/003 suites MUST pass (T031/T032, SC-007)
+
+---
+
+## Phase 10: Convergence
+
+- [x] T036 Fix stale/incorrect FR/SC cross-references in code comments and `.env.example` per FR-005/FR-014/FR-015/FR-007/FR-004/FR-010 (contradicts) — `backend/src/email/outbox.ts` (invite-dedup no-op "(FR-012)"→FR-005; disabled-mode "(FR-016)"→FR-015; per-(re)send "(FR-011)"→FR-014; `enqueueInvite` docblock "(FR-012)"→FR-005; `enqueueConfirmation` docblock "(FR-011)"→FR-014), `backend/src/auth/router.ts` (~L208 & ~L248 auto-confirm "FR-016"→FR-015), `backend/src/gift-lists/router.ts` (~L295 "FR-016"→FR-015), `backend/src/server.ts` (L21 "FR-016"→FR-015), `backend/src/app.ts` (`/confirm` comment "SC-006"→FR-004/FR-010), `.env.example` (retry policy "(FR-017 / FR-018)"→FR-007; resend cap "(FR-003) per 24 h"→FR-014, window is `RATE_LIMIT_WINDOW_MINUTES` = 15 min not 24 h), `backend/src/config/index.ts` (L114 maxAttempts "FR-018"→FR-007; L116 retryBaseMs "FR-017"→FR-007; L124 resendMaxPerAccount "(FR-003) per 24 h"→FR-014, 15-min window)
+
+## Phase 11: Convergence
+
+- [x] T037 Fix remaining stale FR/SC cross-references in `backend/src/email/verification.ts` per FR-010 (contradicts) — L5 token-entropy "(FR-009)"→FR-010 (FR-009 is the email boot gate, not token scoping); L8 "Single use + 24 h TTL (FR-010, FR-027)"→drop FR-027 (a feature-003 refresh-reuse ref, not a 004 FR) keeping FR-010; L11 "indistinguishable (SC-006)"→FR-010 (SC-006 is production startup refusal); L58 "indistinguishable (SC-006)"→FR-010 (no existence leak). Comments-only, zero behavior change
+
+## Phase 12: Convergence
+
+- [x] T038 Fix stale SC cross-reference in `frontend/src/pages/ConfirmPage.tsx` per FR-004 (contradicts) — L12 comment "uniform … uninformative for UX (FR-010 / SC-006)"→"(FR-004 / FR-010)" (SC-006 is production startup refusal, not the uniform confirm outcome; FR-004 is the correct ref for uniform non-error outcome). Comments-only, zero behavior change

@@ -3,8 +3,8 @@
  *
  * Tests (test-first, MUST fail before T014):
  *  1. Share with registered recipient → exactly one invite OutboxMessage
- *  2. Share with unregistered email → same one invite; response indistinguishable (FR-002)
- *  3. Revoke + re-share → no second OutboxMessage (dedup, FR-005)
+ *  2. Share with unregistered email → same one invite; response indistinguishable (004 FR-002)
+ *  3. Revoke + re-share → no second OutboxMessage (dedup, 004 FR-005)
  *  4. Different list, same recipient → new invite (dedup is per-list)
  *  5. Owner-facing response body unchanged (uniform share body from feature 003)
  */
@@ -39,7 +39,7 @@ async function register(app: any, displayName: string) {
     .send({ email, password: 'Password123!', displayName });
   const cookie = accessCookie(res.headers['set-cookie']);
   // Email is enabled in this suite, so the account is unconfirmed and the
-  // gate (FR-012) blocks list routes. Confirm it directly (the confirmation
+  // gate (004 FR-012) blocks list routes. Confirm it directly (the confirmation
   // mechanics are exercised in T015); this leaves no extra confirmation
   // outbox row so the invite-dedup counts below stay exact.
   const user = await prisma.user.findUnique({ where: { email } });
@@ -69,7 +69,7 @@ async function share(
     .send({ recipientEmail, permission: 'shared' });
 }
 
-describe('US1 — Recipient Invite Email (FR-001, FR-002, FR-005)', () => {
+describe('US1 — Recipient Invite Email (004 FR-001, 004 FR-002, 004 FR-005)', () => {
   let app: any;
 
   beforeEach(async () => {
@@ -113,11 +113,11 @@ describe('US1 — Recipient Invite Email (FR-001, FR-002, FR-005)', () => {
     expect(row.bodyText).toContain(inviteLink);
     expect(row.bodyHtml).toBeTruthy();
     expect(row.bodyHtml).toContain(inviteLink);
-    // Invite link is the home page — no token, no deep-link (FR-013)
+    // Invite link is the home page — no token, no deep-link (004 FR-013)
     expect(row.bodyText).not.toContain('token=');
   });
 
-  it('T013.2: share with unregistered email → one invite, response indistinguishable (FR-002)', async () => {
+  it('T013.2: share with unregistered email → one invite, response indistinguishable (004 FR-002)', async () => {
     const { cookie: ownerCookie } = await register(app, 'Owner');
     const listId = await createList(app, ownerCookie, 'Invite List');
 
@@ -140,7 +140,7 @@ describe('US1 — Recipient Invite Email (FR-001, FR-002, FR-005)', () => {
     expect(unregRes.body.sharePermission.id).toMatch(/^sp_/);
   });
 
-  it('T013.3: revoke + re-share → no second outbox row (FR-005 dedup)', async () => {
+  it('T013.3: revoke + re-share → no second outbox row (004 FR-005 dedup)', async () => {
     const { cookie: ownerCookie } = await register(app, 'Owner');
     const { email: recipientEmail } = await register(app, 'Recipient');
     const listId = await createList(app, ownerCookie, 'Dedup List');
@@ -198,7 +198,7 @@ describe('US1 — Recipient Invite Email (FR-001, FR-002, FR-005)', () => {
     const regShare = await share(app, ownerCookie, listReg, regEmail);
     const unregShare = await share(app, ownerCookie, listUnreg, unregEmail);
 
-    // Both 201, same shape (FR-002 / feature 003 FR-010)
+    // Both 201, same shape (004 FR-002 / feature 003 FR-010)
     expect(regShare.status).toBe(201);
     expect(unregShare.status).toBe(201);
 

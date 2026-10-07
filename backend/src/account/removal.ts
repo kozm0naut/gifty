@@ -2,7 +2,7 @@ import { prisma } from '../prisma.js';
 import { Prisma } from '@prisma/client';
 
 /**
- * T048 [US7] — Account removal cascade (FR-014, FR-028; research D12 single
+ * T048 [US7] — Account removal cascade (003 FR-014, 003 FR-028; research D12 single
  * transaction).
  *
  * `DELETE /account` must remove the user atomically:
@@ -19,7 +19,7 @@ import { Prisma } from '@prisma/client';
  *      user delete, so the row survives with identity preserved via target);
  *   7. delete the user row LAST (all FKs that RESTRICT are already cleared).
  *
- * Audit rows survive (append-only, FR-013) with their `actorUserId` nulled
+ * Audit rows survive (append-only, 003 FR-013) with their `actorUserId` nulled
  * (FK `onDelete: SetNull`). No credential/token/password data is stored — the
  * audit capture carries none.
  */
@@ -73,8 +73,8 @@ export async function removeAccount(userId: string, ip: string | null): Promise<
     // (6) Record the removal INSIDE the transaction, before the user delete.
     //     It commits atomically with the rest. The `actorUserId` FK is
     //     `onDelete: SetNull`, so after (7) the row survives with `actorUserId`
-    //     nulled — identity is preserved via `targetType`/`targetId` (FR-013).
-    // No credential/token/password data is stored in the audit row (FR-013).
+    //     nulled — identity is preserved via `targetType`/`targetId` (003 FR-013).
+    // No credential/token/password data is stored in the audit row (003 FR-013).
     await tx.auditEvent.create({
       data: {
         actorUserId: userId,

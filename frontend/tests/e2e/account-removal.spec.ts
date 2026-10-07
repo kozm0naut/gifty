@@ -13,7 +13,7 @@ import {
 } from './helpers';
 
 /**
- * T046 [US7] — Account removal (FR-014, FR-028).
+ * T046 [US7] — Account removal (003 FR-014, 003 FR-028).
  *
  * UI flow: the user confirms an IRREVERSIBLE removal from the account area
  * (explicit confirmation naming the finality: owned lists permanently deleted,

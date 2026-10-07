@@ -9,7 +9,7 @@ export function validateCreateGiftItem(dto: CreateGiftItemDto): string | null {
   if (!dto.name || dto.name.trim().length === 0) {
     return 'Gift item name is required';
   }
-  // FR-003: quantity is optional; when supplied it must be a positive integer.
+  // 001 FR-003: quantity is optional; when supplied it must be a positive integer.
   if (dto.quantity !== undefined && (typeof dto.quantity !== 'number' || dto.quantity < 1)) {
     return 'Quantity must be at least 1';
   }

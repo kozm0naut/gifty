@@ -31,9 +31,9 @@ async function switchUser(page: Page, email: string, password: string): Promise<
 /**
  * US5 (T033) — pending invitations, end to end.
  *
- * Sharing to an email with no account yet must not 404 (FR-010/SC-009);
+ * Sharing to an email with no account yet must not 404 (003 FR-010/003 SC-009);
  * when that email later registers, the invitation converts to access and
- * the new user lands on a list with the consent prompt pending (FR-011).
+ * the new user lands on a list with the consent prompt pending (003 FR-011).
  */
 
 test.describe('pending invitations (US5, T033)', () => {
@@ -44,13 +44,13 @@ test.describe('pending invitations (US5, T033)', () => {
     const owner = await apiRegister(ownerEmail, E2E_PASSWORD, 'Owner');
     const { list } = await apiCreateList(owner.cookie, { title: 'Pending Invitation List' });
 
-    // Share with an email that has no account yet (FR-010: no 404).
+    // Share with an email that has no account yet (003 FR-010: no 404).
     const shareRes = await apiShareList(owner.cookie, list.id, inviteeEmail);
     expect(shareRes.sharePermission.id).toBeTruthy();
     expect(shareRes.sharePermission.permission).toBe('shared');
     expect(shareRes.sharePermission.recipientUserId).toBeNull();
 
-    // Registering the invitee converts the invitation (FR-011).
+    // Registering the invitee converts the invitation (003 FR-011).
     const invitee = await apiRegister(inviteeEmail, E2E_PASSWORD, 'New Invitee');
     const { lists } = await apiFetchLists(invitee.cookie);
     expect(lists.some((l) => l.id === list.id)).toBe(true);
@@ -60,7 +60,7 @@ test.describe('pending invitations (US5, T033)', () => {
     await page.goto(`/list/${list.id}`);
     await expect(page.getByText('Pending Invitation List', { exact: false })).toBeVisible();
 
-    // …and the consent prompt is pending for them (FR-022).
+    // …and the consent prompt is pending for them (003 FR-022).
     await expect(page.getByRole('dialog', { name: /name disclosure/i })).toBeVisible();
   });
 
@@ -76,12 +76,12 @@ test.describe('pending invitations (US5, T033)', () => {
     await apiShareList(owner.cookie, list.id, inviteeEmail);
 
     // The pending invitee is not an account yet, so no one can log in as them —
-    // a stranger with a different email has no access at all (FR-010).
+    // a stranger with a different email has no access at all (003 FR-010).
     const { lists: strangerLists } = await apiFetchLists(stranger.cookie);
     expect(strangerLists.some((l) => l.id === list.id)).toBe(false);
 
     // The owner's sharing view lists the invitee by email (the owner's source
-    // of truth) WITHOUT revealing registration status (T061, FR-010/FR-021):
+    // of truth) WITHOUT revealing registration status (T061, 003 FR-010/003 FR-021):
     // no "not registered yet" label, no separate pending-invitations section.
     await switchUser(page, ownerEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);

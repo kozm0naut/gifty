@@ -1,16 +1,16 @@
 export const SESSION_EXPIRED_EVENT = 'gift-list:session-expired';
 
-/** Detail payload of SESSION_EXPIRED_EVENT (FR-027). */
+/** Detail payload of SESSION_EXPIRED_EVENT (003 FR-027). */
 export interface SessionExpiredDetail {
   message: string;
-  /** True when the termination was triggered by refresh-token reuse (theft signal, FR-026). */
+  /** True when the termination was triggered by refresh-token reuse (theft signal, 003 FR-026). */
   security?: boolean;
 }
 
-/** Plain notice: session expired or revoked — no theft signal (FR-027). */
+/** Plain notice: session expired or revoked — no theft signal (003 FR-027). */
 export const SESSION_EXPIRED_MESSAGE = 'Your session has expired. Please log in again.';
 
-/** Security notice: refresh-token reuse detected — recommend a password change (FR-027). */
+/** Security notice: refresh-token reuse detected — recommend a password change (003 FR-027). */
 export const SESSION_SECURITY_MESSAGE =
   'Your session was ended for security reasons. For your safety, please change your password and sign in again.';
 
@@ -18,7 +18,7 @@ export type AccountUser = {
   id: string;
   email: string;
   displayName: string;
-  /** Feature 004 (US2, FR-012): email confirmed. Derived server-side from
+  /** Feature 004 (US2, 004 FR-012): email confirmed. Derived server-side from
    *  `verifiedAt !== null`. When absent (older response) the client treats
    *  the account as confirmed to stay backward compatible. */
   verified?: boolean;
@@ -56,7 +56,7 @@ export type GiftItem = {
   unitPrice?: number;
   state: 'available' | 'claimed' | 'purchased';
   claimantUserId?: string;
-  /** Resolved display name of the claimant (recipient-facing only; FR-009).
+  /** Resolved display name of the claimant (recipient-facing only; 001 FR-009).
    *  The purchaser is always the claimant, so this single name covers both. */
   claimantDisplayName?: string | null;
   createdAt: string;
@@ -69,11 +69,11 @@ export type DashboardList = GiftList & {
   items?: GiftItem[];
 };
 
-/** Name-disclosure consent state on a list (US5, FR-021–FR-024). */
+/** Name-disclosure consent state on a list (US5, 003 FR-021–FR-024). */
 export type ConsentState = 'pending' | 'revealed' | 'declined';
 
 /**
- * A row in the owner's uniform share view (Phase 12, FR-010/FR-021). Covers
+ * A row in the owner's uniform share view (Phase 12, 003 FR-010/003 FR-021). Covers
  * BOTH registered recipients (SharePermission) and unregistered invitees
  * (PendingInvitation) — the response never distinguishes the two, and
  * deliberately carries NO `consent` field (it would fingerprint registration
@@ -94,9 +94,9 @@ export type SharePermission = {
   recipientEmail?: string | null;
 };
 
-// Session termination (FR-027): the session was ended — either expired,
+// Session termination (003 FR-027): the session was ended — either expired,
 // revoked by the user elsewhere, or by refresh-token reuse (theft signal).
-// `security` drives the stronger FR-027 notice on the sign-in page.
+// `security` drives the stronger 003 FR-027 notice on the sign-in page.
 function dispatchSessionExpired(detail: SessionExpiredDetail): void {
   window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail }));
 }
@@ -122,7 +122,7 @@ function refreshOnce(): Promise<Response> {
 // Authenticated request wrapper (T028): the browser sends the HttpOnly
 // gifty_access cookie automatically (same-origin). On 401 we attempt ONE
 // refresh, then retry the original request exactly once. If the refresh
-// fails we surface the FR-027 notice:
+// fails we surface the 003 FR-027 notice:
 //   - reason "stale_refresh"  → theft signal → security notice
 //   - "expired" / "revoked"   → plain expiry notice
 async function handleResponse<T>(response: Response, retry?: () => Promise<Response>): Promise<T> {
@@ -231,7 +231,7 @@ export async function fetchAccount(): Promise<AccountUser> {
 }
 
 /**
- * Sign out (FR-008): the server revokes the session family and clears both
+ * Sign out (003 FR-008): the server revokes the session family and clears both
  * cookies. A 401 here simply means the session was already gone — treat as
  * success so the UI can always complete a clean sign-out.
  */
@@ -246,7 +246,7 @@ export async function logoutSession(): Promise<void> {
 }
 
 /**
- * Re-request a confirmation email (feature 004, US2, FR-014 / FR-016).
+ * Re-request a confirmation email (feature 004, US2, 004 FR-014 / 004 FR-016).
  * Requires a live session (the allow-list endpoint an unconfirmed account may
  * reach). 202 → queued; 403 → already confirmed; 429 → rate-limited;
  * 401 → no session. The server's `message` is stable and non-leaking, so it
@@ -269,7 +269,7 @@ export async function resendConfirmation(): Promise<void> {
 }
 
 /**
- * Remove the account (feature 003, US7, FR-014 / FR-028). Irreversible: the
+ * Remove the account (feature 003, US7, 003 FR-014 / 003 FR-028). Irreversible: the
  * server atomically deletes the user, their owned lists, recipient-side
  * permissions, sessions, and pending invitations, and reverts their claims on
  * others' items. Both session cookies are cleared. 204 on success; 401 if the
@@ -350,7 +350,7 @@ export async function unpurchaseGiftItem(itemId: string): Promise<GiftItem> {
 }
 
 /**
- * Owner-only: the list's uniform share entries (Phase 12, FR-010/FR-021).
+ * Owner-only: the list's uniform share entries (Phase 12, 003 FR-010/003 FR-021).
  * Registered recipients and unregistered invitees appear in the SAME array
  * with no distinguishing fields; each entry carries the invite email and a
  * display name only when that recipient consented to reveal.
@@ -364,7 +364,7 @@ export async function revokePermission(listId: string, permissionId: string): Pr
   await apiFetch<unknown>(`/lists/${listId}/share/${permissionId}`, { method: 'DELETE' });
 }
 
-// ── US5: name-disclosure consent (FR-021–FR-024) ─────────────────────────────
+// ── US5: name-disclosure consent (003 FR-021–FR-024) ─────────────────────────────
 
 export type ConsentInfo = {
   consent: ConsentState;
@@ -383,7 +383,7 @@ export async function fetchConsent(listId: string): Promise<ConsentInfo> {
 
 /**
  * Set the caller's consent to reveal or hide their display name on a list
- * (FR-023). Idempotent and reversible at any time.
+ * (003 FR-023). Idempotent and reversible at any time.
  */
 export async function setConsent(listId: string, consent: ConsentState): Promise<{ consent: ConsentState }> {
   const data = await apiFetch<{ consent: ConsentState }>(`/lists/${listId}/consent`, {

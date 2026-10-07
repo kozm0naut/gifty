@@ -2,16 +2,16 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { validateConfig, loadConfig } from '../../src/config/index.js';
 
 /**
- * T002a — Email boot gate + sending-mode resolution (US6 / FR-009, SC-006,
- * FR-015, SC-010).
+ * T002a — Email boot gate + sending-mode resolution (US6 / 004 FR-009, 004 SC-006,
+ * 004 FR-015, 004 SC-010).
  *
  * The startup gate (`validateConfig()`) MUST refuse to boot in a production
  * context when email is ENABLED but no live sender (`RESEND_API_KEY`) is
  * configured — the refusal message names `RESEND_API_KEY` and the fix so an
- * operator can remediate without documentation (FR-009). Local development is
+ * operator can remediate without documentation (004 FR-009). Local development is
  * not blocked: an unconfigured live sender resolves to the capture stub
  * (mode b). When email is DISABLED the app boots and auto-confirms new
- * accounts (mode c, FR-015).
+ * accounts (mode c, 004 FR-015).
  *
  * These tests exercise the gate + mode resolution directly (no server / DB
  * needed) by driving `validateConfig()` / `loadConfig()` against crafted
@@ -69,7 +69,7 @@ beforeEach(() => {
   delete process.env.POSTGRES_PASSWORD;
   delete process.env.JWT_SECRET_MIN_LENGTH;
   // Reset the rate-limit / session knobs to their built-in defaults so the
-  // FR-001/FR-007 cross-checks in validateConfig() cannot interfere.
+  // 003 FR-001/003 FR-007 cross-checks in validateConfig() cannot interfere.
   delete process.env.RATE_LIMIT_WINDOW_MINUTES;
   delete process.env.LOGIN_MAX_FAILURES_PER_SOURCE;
   delete process.env.REGISTER_MAX_FAILURES_PER_SOURCE;
@@ -100,12 +100,12 @@ afterEach(() => {
   }
 });
 
-describe('email boot gate — production + enabled + no key (FR-009 / SC-006)', () => {
+describe('email boot gate — production + enabled + no key (004 FR-009 / 004 SC-006)', () => {
   it('refuses to boot, naming RESEND_API_KEY and the remedy', () => {
     process.env.EMAIL_ENABLED = 'true';
     delete process.env.RESEND_API_KEY;
     expect(() => validateConfig()).toThrowError(/RESEND_API_KEY/);
-    // The message must say what must change (FR-009).
+    // The message must say what must change (004 FR-009).
     expect(() => validateConfig()).toThrowError(/set|configur/i);
   });
 
@@ -128,7 +128,7 @@ describe('email boot gate — production + enabled + valid key (US6 scenario 2)'
   });
 });
 
-describe('email boot gate — production + live mode requires RESEND_FROM (FR-009)', () => {
+describe('email boot gate — production + live mode requires RESEND_FROM (004 FR-009)', () => {
   it('refuses to boot when key is set but RESEND_FROM is missing', () => {
     process.env.EMAIL_ENABLED = 'true';
     process.env.RESEND_API_KEY = RESEND_KEY;
@@ -173,7 +173,7 @@ describe('email boot gate — production + live mode requires RESEND_FROM (FR-00
   });
 });
 
-describe('email boot gate — production + disabled (FR-015 / SC-010)', () => {
+describe('email boot gate — production + disabled (004 FR-015 / 004 SC-010)', () => {
   it('boots (auto-confirm mode) with no live sender', () => {
     process.env.EMAIL_ENABLED = 'false';
     delete process.env.RESEND_API_KEY;

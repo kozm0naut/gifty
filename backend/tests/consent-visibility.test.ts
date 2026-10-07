@@ -72,7 +72,7 @@ async function claimItem(app: any, recipient: User, itemId: string) {
   }
 }
 
-/** Set the recipient name-disclosure consent directly (FR-021/FR-023). */
+/** Set the recipient name-disclosure consent directly (003 FR-021/003 FR-023). */
 async function setConsent(app: any, recipient: User, listId: string, consent: 'revealed' | 'declined') {
   const res = await request(app)
     .post(`/lists/${listId}/consent`)
@@ -123,8 +123,8 @@ beforeEach(async () => {
   await prisma.user.deleteMany();
 });
 
-describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
-  it('shows a non-consented claimant as the "????" placeholder to co-recipients (FR-024)', async () => {
+describe('identity visibility (T031, 003 FR-021/003 FR-024/003 FR-025, 003 SC-008)', () => {
+  it('shows a non-consented claimant as the "????" placeholder to co-recipients (003 FR-024)', async () => {
     const app = await createApp();
     const owner = await register(app, 'vis-owner', 'Owner');
     const claimant = await register(app, 'vis-claimant', 'Claimer One');
@@ -145,11 +145,11 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     const item = findItem(res.body, listId, itemId);
     expect(item.state).toBe('claimed');
 
-    // …but the claimant identity is the placeholder, never the name (FR-024).
+    // …but the claimant identity is the placeholder, never the name (003 FR-024).
     expect(item.claimantDisplayName).toBe('????');
   });
 
-  it('after reveal, the claimant name is visible to co-recipients while the owner view stays identity-free (SC-008 / FR-016)', async () => {
+  it('after reveal, the claimant name is visible to co-recipients while the owner view stays identity-free (003 SC-008 / 003 FR-016)', async () => {
     const app = await createApp();
     const owner = await register(app, 'vis2-owner', 'Owner');
     const claimant = await register(app, 'vis2-claimant', 'Claimer Two');
@@ -170,7 +170,7 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     expect(item.state).toBe('claimed');
     expect(item.claimantDisplayName).toBe('Claimer Two');
 
-    // Owner-privacy do-not-regress (FR-016): the owner never sees claimant
+    // Owner-privacy do-not-regress (003 FR-016): the owner never sees claimant
     // identity or claim state on their own list.
     const ownerRes = await request(app)
       .get(`/lists/${listId}`)
@@ -191,7 +191,7 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     await shareWith(app, owner, listId, viewer);
 
     // The /recipients feed (avatar stack) must not leak the non-consented
-    // recipient's display name to the viewer (SC-008).
+    // recipient's display name to the viewer (003 SC-008).
     const res = await request(app)
       .get(`/lists/${listId}/recipients`)
       .set('Cookie', `gifty_access=${viewer.access}`);
@@ -203,7 +203,7 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     expect(JSON.stringify(res.body)).not.toContain(anon.email);
   });
 
-  it('keeps the owner email out of every recipient-visible response (FR-025, SC-008)', async () => {
+  it('keeps the owner email out of every recipient-visible response (003 FR-025, 003 SC-008)', async () => {
     const app = await createApp();
     const owner = await register(app, 'vis4-owner', 'Owner');
     const viewer = await register(app, 'vis4-viewer', 'Viewer Five');
@@ -233,7 +233,7 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     }
   });
 
-  it('owner view: the recipient name is hidden until the recipient consents to reveal, then shown (T060, FR-021)', async () => {
+  it('owner view: the recipient name is hidden until the recipient consents to reveal, then shown (T060, 003 FR-021)', async () => {
     const app = await createApp();
     const owner = await register(app, 'vis5-owner', 'Owner');
     const anon = await register(app, 'vis5-anon', 'Owner Visible Recip');
@@ -264,7 +264,7 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
     expect(entry2.recipientDisplayName).toBe('Owner Visible Recip');
   });
 
-  it('owner view: registered-unconsented and unregistered invitees are indistinguishable (T060, FR-010/FR-021)', async () => {
+  it('owner view: registered-unconsented and unregistered invitees are indistinguishable (T060, 003 FR-010/003 FR-021)', async () => {
     const app = await createApp();
     const owner = await register(app, 'vis8-owner', 'Owner');
     const registered = await register(app, 'vis8-reg', 'Registered Unconsented');
@@ -385,15 +385,15 @@ describe('identity visibility (T031, FR-021/FR-024/FR-025, SC-008)', () => {
   });
 });
 
-describe('FR-029 "Shared with" ordering (T066)', () => {
+describe('003 FR-029 "Shared with" ordering (T066)', () => {
   // The API returns all entries (registered + pending) merged and sorted by
   // createdAt (invite order). The frontend (ListPage / PermissionManager)
   // re-sorts for display (revealed-alphabetical → self-if-masked → remaining
   // in invite order). This test verifies the API provides the correct data
   // in the correct base order, and that position never leaks registration
-  // status (FR-010).
+  // status (003 FR-010).
 
-  it('owner /share-permissions: entries merged in invite (createdAt) order; position does not distinguish registered from unregistered (FR-029, FR-010)', async () => {
+  it('owner /share-permissions: entries merged in invite (createdAt) order; position does not distinguish registered from unregistered (003 FR-029, 003 FR-010)', async () => {
     const app = await createApp();
     const owner = await register(app, 'ord-owner', 'Owner');
     const alice = await register(app, 'ord-alice', 'Alice');
@@ -412,7 +412,7 @@ describe('FR-029 "Shared with" ordering (T066)', () => {
     await shareWith(app, owner, listId, bob);
     await shareWith(app, owner, listId, alice);
 
-    // Reveal alice (FR-021/FR-023).
+    // Reveal alice (003 FR-021/003 FR-023).
     await setConsent(app, alice, listId, 'revealed');
 
     // --- Owner view ---
@@ -453,7 +453,7 @@ describe('FR-029 "Shared with" ordering (T066)', () => {
     }
   });
 
-  it('recipient /recipients: entries merged in invite (createdAt) order; own entry present; position does not distinguish registered from unregistered (FR-029, FR-010)', async () => {
+  it('recipient /recipients: entries merged in invite (createdAt) order; own entry present; position does not distinguish registered from unregistered (003 FR-029, 003 FR-010)', async () => {
     const app = await createApp();
     const owner = await register(app, 'ord2-owner', 'Owner');
     const alice = await register(app, 'ord2-alice', 'Alice');
@@ -471,7 +471,7 @@ describe('FR-029 "Shared with" ordering (T066)', () => {
     await shareWith(app, owner, listId, bob);
     await shareWith(app, owner, listId, alice);
 
-    // Alice reveals (FR-021/FR-023). Bob does not consent.
+    // Alice reveals (003 FR-021/003 FR-023). Bob does not consent.
     await setConsent(app, alice, listId, 'revealed');
 
     // --- Recipient view (as alice) ---
@@ -489,7 +489,7 @@ describe('FR-029 "Shared with" ordering (T066)', () => {
 
     // Alice sees her own name (own entry), alice's consent is revealed.
     // Bob never consented → placeholder. Ghost has no account → placeholder.
-    // No email is exposed to co-recipients (FR-025).
+    // No email is exposed to co-recipients (003 FR-025).
     expect(JSON.stringify(res.body)).not.toContain(ghostEmail);
     expect(JSON.stringify(res.body)).not.toContain(bob.email);
     expect(JSON.stringify(res.body)).not.toContain(alice.email);
@@ -504,7 +504,7 @@ describe('FR-029 "Shared with" ordering (T066)', () => {
     }
   });
 
-  it('recipient /recipients: position does not leak which invitees registered (FR-029, FR-010, SC-009)', async () => {
+  it('recipient /recipients: position does not leak which invitees registered (003 FR-029, 003 FR-010, 003 SC-009)', async () => {
     const app = await createApp();
     const owner = await register(app, 'ord3-owner', 'Owner');
     const reg1 = await register(app, 'ord3-reg1', 'Reg One');

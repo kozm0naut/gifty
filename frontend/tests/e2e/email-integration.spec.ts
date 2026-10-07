@@ -5,7 +5,7 @@ import { E2E_PASSWORD, uniqueEmail } from './helpers';
  * T030 — E2E spec for the email-integration feature (feature 004).
  *
  * Drives the real React UI (served by the containerized app) against the real
- * Express + Prisma + PostgreSQL backend, in **capture mode** (US5/SC-003): no
+ * Express + Prisma + PostgreSQL backend, in **capture mode** (US5/004 SC-003): no
  * live provider is ever contacted, every message lands in the process output
  * and the durable OutboxMessage row. The suite is run against the Docker stack
  * (BASE_URL=http://localhost:8080), so the API is same-origin.
@@ -148,7 +148,7 @@ test.describe('email integration (feature 004)', () => {
     await page.waitForSelector('[data-testid="confirm-success"]', { timeout: 20000 });
     expect((await page.request.get('/lists')).status()).toBe(200);
 
-    // FR-010: re-following the same single-use link is a no-op, not an error.
+    // 004 FR-010: re-following the same single-use link is a no-op, not an error.
     await page.goto(`/confirm?token=${encodeURIComponent(token)}`);
     await page.waitForSelector('[data-testid="confirm-success"]', { timeout: 20000 });
     const account = await page.request.get('/account');
@@ -214,7 +214,7 @@ test.describe('email integration (feature 004)', () => {
     });
     expect(shareRes.status).toBe(201, 'share never fails because of email');
 
-    // The invite is captured in the outbox: the home link, no token (D9/FR-013).
+    // The invite is captured in the outbox: the home link, no token (D9/004 FR-013).
     const row = await fetchInviteRow(guestEmail, list.id);
     expect(row).not.toBeNull();
     expect(row!.subject).toBe("You've been shared a gift list");

@@ -15,7 +15,7 @@ interface ConsentModalProps {
 }
 
 /**
- * US5 (FR-022/FR-023): the name-disclosure consent dialog, shared by the
+ * US5 (003 FR-022/003 FR-023): the name-disclosure consent dialog, shared by the
  * first-open prompt (`ConsentPrompt`) and the self-serve control
  * (`ConsentControl`) so both give the user the same contextual choice.
  *

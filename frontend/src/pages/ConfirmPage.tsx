@@ -9,7 +9,7 @@ import { BrandMark } from '../components/BrandMark';
  * The page keys off `GET /account` → `user.verified` (exposed by the auth
  * context as `isVerified`), NEVER off the `/confirm` response body: the
  * server returns a uniform `{status:"confirmed"}` for every outcome so the
- * link click closes the oracle and is uninformative for UX (FR-010 / SC-006).
+ * link click closes the oracle and is uninformative for UX (004 FR-004 / 004 FR-010).
  *
  * States (T021):
  *  - initializing            → wait for the cookie-backed bootstrap.

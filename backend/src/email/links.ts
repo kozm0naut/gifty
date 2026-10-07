@@ -10,7 +10,7 @@
  *
  *   - `buildConfirmationLink(token)` → `{origin}/confirm?token=<raw>` (D4)
  *   - `buildInviteLink()`            → `{origin}/`  (home page; no token, no
- *     deep link — FR-013)
+ *     deep link — 004 FR-013)
  */
 
 import { loadConfig } from '../config/index.js';

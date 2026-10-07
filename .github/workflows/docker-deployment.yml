@@ -1,11 +1,11 @@
-# T026 — SC-004 / US3-AC1 (quickstart V8): genuine clean-machine evidence.
+# T026 — 002 SC-004 / US3-AC1 (quickstart V8): genuine clean-machine evidence.
 #
-# Proves the "second clean machine / fresh CI environment" leg of SC-004:
+# Proves the "second clean machine / fresh CI environment" leg of 002 SC-004:
 # on a clean GitHub runner, following only the documented sequence
 # (docs/docker.md + contracts/deployment.md §1/§4), a working app is
 # reached at http://localhost:8080, and the full Playwright e2e suite
 # (8 tests) passes against the containerized single-origin app.
-name: Docker deployment (SC-004)
+name: Docker deployment (002 SC-004)
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v5
 
       # Credentials: JWT_SECRET AND POSTGRES_PASSWORD are required with no
-      # default (Constitution §IV / FR-006). A clean runner has no .env, so seed
+      # default (Constitution §IV / 003 FR-006). A clean runner has no .env, so seed
       # them once via the SAME mechanism local `npm run docker:up` uses
       # (scripts/ensure-env.mjs — absent-only, idempotent, strong random).
       # Without a value, postgres boots with an empty password, fails its
@@ -37,7 +37,7 @@ jobs:
           set -eu
           docker compose up --build -d
 
-      # Readiness signal (FR-013, contracts §4): poll until 200 — 2-minute budget.
+      # Readiness signal (002 FR-013, contracts §4): poll until 200 — 2-minute budget.
       - name: Wait for readiness (GET /healthz -> 200 within 2 minutes)
         run: |
           set -eu
@@ -53,7 +53,7 @@ jobs:
           docker compose logs --no-color
           exit 1
 
-      # SC-002 in a clean environment: the existing e2e suite is the acceptance
+      # 002 SC-002 in a clean environment: the existing e2e suite is the acceptance
       # validation (quickstart "Automated validation").
       - name: Run Playwright e2e against http://localhost:8080
         working-directory: frontend

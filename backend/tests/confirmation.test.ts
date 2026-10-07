@@ -6,16 +6,16 @@
  *      a /confirm?token= link); 201 body gains `verified: false`.
  *   2. GET /confirm?token=<valid> → 200 {status:'confirmed'}; verifiedAt set;
  *      verificationTokenHash cleared; gate lifted.
- *   3. Same token again → same 200 body (FR-004, idempotent).
- *   4. Expired token → same 200 body (FR-010).
- *   5. Unknown token → same 200 body (FR-010).
- *   6. No token → same 200 body (FR-010).
- *   7. Unconfirmed hits GET /lists → 403 stable body (FR-012 gate).
+ *   3. Same token again → same 200 body (004 FR-004, idempotent).
+ *   4. Expired token → same 200 body (004 FR-010).
+ *   5. Unknown token → same 200 body (004 FR-010).
+ *   6. No token → same 200 body (004 FR-010).
+ *   7. Unconfirmed hits GET /lists → 403 stable body (004 FR-012 gate).
  *   8. Unconfirmed hits GET /account → 200 (allow-list).
  *   9. Unconfirmed POST /auth/refresh → 200 (allow-list).
  *  10. Unconfirmed POST /auth/logout → 204 (allow-list).
  *  11. Resend (unconfirmed) → 202; new token supersedes; new OutboxMessage.
- *  12. 4th resend within window (budget 3) → 429 (FR-014).
+ *  12. 4th resend within window (budget 3) → 429 (004 FR-014).
  *  13. Resend on confirmed account → 403.
  *  14. disabled mode: register → verified:true, no OutboxMessage, no gate.
  */
@@ -75,7 +75,7 @@ async function resetDb() {
   await prisma.user.deleteMany();
 }
 
-describe('US2 — Account Confirmation (FR-003, FR-004, FR-010, FR-012, FR-014)', () => {
+describe('US2 — Account Confirmation (004 FR-003, 004 FR-004, 004 FR-010, 004 FR-012, 004 FR-014)', () => {
   let app: any;
 
   beforeEach(async () => {
@@ -125,7 +125,7 @@ describe('US2 — Account Confirmation (FR-003, FR-004, FR-010, FR-012, FR-014)'
     expect(listRes.status).toBe(200);
   });
 
-  it('T015.3: same token again → same uniform 200 body (idempotent, FR-004)', async () => {
+  it('T015.3: same token again → same uniform 200 body (idempotent, 004 FR-004)', async () => {
     const { email } = await register(app, 'Repeat');
     const row = await prisma.outboxMessage.findFirst({ where: { recipientEmail: email } });
     const token = tokenFromBody(row!.bodyText);
@@ -137,7 +137,7 @@ describe('US2 — Account Confirmation (FR-003, FR-004, FR-010, FR-012, FR-014)'
     expect(second.body).toEqual(first.body);
   });
 
-  it('T015.4: expired token → same uniform 200 body (FR-010)', async () => {
+  it('T015.4: expired token → same uniform 200 body (004 FR-010)', async () => {
     const { email } = await register(app, 'Expired');
     const row = await prisma.outboxMessage.findFirst({ where: { recipientEmail: email } });
     const token = tokenFromBody(row!.bodyText);
@@ -156,12 +156,12 @@ describe('US2 — Account Confirmation (FR-003, FR-004, FR-010, FR-012, FR-014)'
     expect(user?.verifiedAt).toBeNull();
   });
 
-  it('T015.5: unknown token → same uniform 200 body (FR-010)', async () => {
+  it('T015.5: unknown token → same uniform 200 body (004 FR-010)', async () => {
     const res = await request(app).get('/confirm?token=garbage-token-that-matches-nothing');
     expectUniformConfirm(res);
   });
 
-  it('T015.6: no token → same uniform 200 body (FR-010)', async () => {
+  it('T015.6: no token → same uniform 200 body (004 FR-010)', async () => {
     const res = await request(app).get('/confirm');
     expectUniformConfirm(res);
   });
@@ -249,7 +249,7 @@ describe('US2 — Account Confirmation (FR-003, FR-004, FR-010, FR-012, FR-014)'
     expect(user2?.verifiedAt).not.toBeNull();
   });
 
-  it('T015.12: 4th resend within window (budget 3) → 429 (FR-014)', async () => {
+  it('T015.12: 4th resend within window (budget 3) → 429 (004 FR-014)', async () => {
     const { cookie } = await register(app, 'FloodMe');
 
     // Budget is 3 (RESEND_MAX_PER_ACCOUNT default). First 3 succeed...

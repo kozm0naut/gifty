@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 
 // Walk a directory tree, yielding every JS/TS source file (used by the
-// append-only audit assertions in the FR-013 block below).
+// append-only audit assertions in the 003 FR-013 block below).
 function* walk(dir: string): Generator<string> {
   for (const entry of readdirSync(dir)) {
     const p = join(dir, entry);
@@ -37,7 +37,7 @@ describe('recordAuditEvent (T009)', () => {
   it('is fire-and-forget: never rejects the caller even when the insert fails', async () => {
     (prisma.auditEvent.create as any).mockRejectedValue(new Error('db down'));
 
-    // Must not throw / reject into the request path (FR-013).
+    // Must not throw / reject into the request path (003 FR-013).
     await expect(
       recordAuditEvent({
         action: 'auth_login_failure',
@@ -102,7 +102,7 @@ describe('recordAuditEvent (T009)', () => {
 
     // 13 actions from the original security-hardening baseline (data-model.md)
     // plus the two US5 (consent) actions: `consent_updated` and
-    // `invitation_matched`. Both are security-relevant, so FR-013 requires a
+    // `invitation_matched`. Both are security-relevant, so 003 FR-013 requires a
     // recordable audit action for each. Feature 004 (email integration) adds
     // four more (D7): `email_invite_queued`, `email_confirmation_queued`,
     // `email_delivered`, `email_failed` — so the vocabulary is 19.
@@ -147,7 +147,7 @@ describe('recordAuditEvent (T009)', () => {
   });
 });
 
-describe('FR-013 append-only audit trail (T064)', () => {
+describe('003 FR-013 append-only audit trail (T064)', () => {
   it('AuditEvent schema is append-only: createdAt present, no updatedAt', () => {
     const schema = readFileSync(
       join(here, '../../prisma/schema.prisma'),

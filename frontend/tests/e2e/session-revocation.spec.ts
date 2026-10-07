@@ -8,7 +8,7 @@ import {
 } from './helpers';
 
 /**
- * T026 — E2E spec for the session lifecycle (FR-026 / FR-027, SC-005).
+ * T026 — E2E spec for the session lifecycle (003 FR-026 / 003 FR-027, 003 SC-005).
  *
  * Covers the four lifecycle guarantees:
  *   1. Sign-in issues HttpOnly cookies that are NOT readable by page script.
@@ -144,7 +144,7 @@ async function clickListCard(page, listTitle: string) {
   await card.locator('.list-card-title').click();
 }
 
-test.describe('T026: Session revocation & lifecycle (FR-026/FR-027)', () => {
+test.describe('T026: Session revocation & lifecycle (003 FR-026/003 FR-027)', () => {
   test('sign-in issues HttpOnly cookies that are NOT readable by page script', async ({ context, page }) => {
     const email = uniqueEmail('httpOnly');
     const { cookies, setCookieHeader } = await harnessLogin(email, E2E_PASSWORD, 'E2E HttpOnly');

@@ -151,7 +151,7 @@ describe('User Story 3 - Share a list with trusted recipients', () => {
     expect(recipientView.body.list.items[0].claimantUserId).toBe(recipientResponse.body.user.id);
   });
 
-  it('never leaks claim/purchase state or identity in the owner-facing item payload (FR-009 / SC-005)', async () => {
+  it('never leaks claim/purchase state or identity in the owner-facing item payload (001 FR-009 / 001 SC-005)', async () => {
     // The owner-safe projection is a whitelist: no matter what claim/purchase
     // metadata the recipient produces (claimedAt, purchasedAt, updatedAt bumps,
     // claimantUserId), NONE of it may reach the owner. Assert the owner's item

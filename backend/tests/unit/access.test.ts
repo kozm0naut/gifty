@@ -20,7 +20,7 @@ beforeEach(() => {
 });
 
 describe('hasListPermission (unit)', () => {
-  it('denies when the list does not exist (deny-by-default, FR-005)', async () => {
+  it('denies when the list does not exist (deny-by-default, 001 FR-005)', async () => {
     (prisma.giftList.findUnique as any).mockResolvedValue(null);
 
     const result = await hasListPermission('user-1', 'list-1', 'view');
@@ -48,7 +48,7 @@ describe('hasListPermission (unit)', () => {
     await expect(hasListPermission('recipient-1', 'list-1', 'manage')).resolves.toBe(false);
   });
 
-  it('denies a stranger with no share permission (FR-005)', async () => {
+  it('denies a stranger with no share permission (001 FR-005)', async () => {
     (prisma.giftList.findUnique as any).mockResolvedValue({ id: 'list-1', ownerUserId: 'owner-1' });
     (prisma.sharePermission.findFirst as any).mockResolvedValue(null);
 

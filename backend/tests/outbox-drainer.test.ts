@@ -7,7 +7,7 @@
  *  4. `failed` is terminal — a later drainOnce does NOT retry it
  *  5. in-flight (`sending`) row → `reclaimStaleSending()` → back to `queued`, nextAttemptAt=now
  *  6. resending a confirmation supersedes the prior queued row (status=`superseded`, `supersededAt`)
- *  7. origin action (share) succeeds even when the sender is down (SC-007)
+ *  7. origin action (share) succeeds even when the sender is down (004 SC-007)
  *
  * T025 (verify, exercised by the same suite): drain claims to `sending` before
  * calling the mailer; success → `sent` + `sentAt`; failure → backoff to `queued`
@@ -92,7 +92,7 @@ async function share(app: App, listId: string, ownerCookie: string, recipientEma
     .send({ recipientEmail, permission: 'shared' });
 }
 
-describe('US4 — Reliable, Queued Delivery (FR-007, FR-008, SC-004, SC-007)', () => {
+describe('US4 — Reliable, Queued Delivery (004 FR-007, 004 FR-008, 004 SC-004, 004 SC-007)', () => {
   let app: App;
   const savedEnv: Record<string, string | undefined> = {};
 
@@ -303,7 +303,7 @@ describe('US4 — Reliable, Queued Delivery (FR-007, FR-008, SC-004, SC-007)', (
     expect(after?.status).toBe('superseded');
   });
 
-  it('T024.7: share succeeds even when the sender is down (SC-007)', async () => {
+  it('T024.7: share succeeds even when the sender is down (004 SC-007)', async () => {
     const recipient = uniqueEmail('t024.7-r');
     setMailerForTest(scriptableMailer('alwaysFail', recipient).mailer);
     const owner = await registerConfirmed(app, 'T024.7');

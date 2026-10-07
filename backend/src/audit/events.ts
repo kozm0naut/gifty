@@ -5,11 +5,11 @@ import { prisma } from '../prisma.js';
  * Audit capture module for feature 003 (security hardening) — T005.
  *
  * - Fire-and-forget: `recordAuditEvent` never rejects into the request
- *   path (FR-013). Insert failures are logged, not thrown.
+ *   path (003 FR-013). Insert failures are logged, not thrown.
  * - Sensitive data: any key matching a credential-like pattern is scrubbed
- *   from `detail` before persistence (FR-013).
+ *   from `detail` before persistence (003 FR-013).
  * - Append-only: there is no update or delete path — the application never
- *   prunes audit rows (5-year retention, FR-013).
+ *   prunes audit rows (5-year retention, 003 FR-013).
  */
 
 export const AUDIT_ACTIONS = [
@@ -72,7 +72,7 @@ export interface AuditEventInput {
  * Record a security-relevant audit event. Fire-and-forget: the returned
  * promise resolves (never rejects) regardless of whether the underlying
  * insert succeeded. Callers MUST NOT await this in a way that blocks the
- * request path (FR-013).
+ * request path (003 FR-013).
  */
 export function recordAuditEvent(input: AuditEventInput): Promise<void> {
   const detail = input.detail ? scrub(input.detail) : null;

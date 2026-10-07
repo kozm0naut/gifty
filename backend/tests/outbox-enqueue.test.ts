@@ -1,5 +1,5 @@
 /**
- * T022 — US3: One Invite Per Recipient Per List (FR-005, FR-014, SC-001)
+ * T022 — US3: One Invite Per Recipient Per List (004 FR-005, 004 FR-014, 004 SC-001)
  *
  * These tests drive the outbox enqueue primitives directly (the same call
  * shape the share/register routers use) and pin the dedup guarantees:
@@ -50,7 +50,7 @@ const INVITE = (listId: string, recipientEmail: string) => ({
   bodyHtml: `Open your list: ${listId}`,
 });
 
-describe('US3 — One Invite Per Recipient Per List (FR-005, FR-014)', () => {
+describe('US3 — One Invite Per Recipient Per List (004 FR-005, 004 FR-014)', () => {
   beforeEach(async () => {
     await prisma.outboxMessage.deleteMany();
     await prisma.giftItem.deleteMany();
@@ -160,7 +160,7 @@ describe('US3 — One Invite Per Recipient Per List (FR-005, FR-014)', () => {
     expect(rows[0].status).toBe('queued');
   });
 
-  it('T022.7: re-enqueue confirmation for the same (U, E) → new row (not deduped, FR-014)', async () => {
+  it('T022.7: re-enqueue confirmation for the same (U, E) → new row (not deduped, 004 FR-014)', async () => {
     const { recipient } = await seed();
 
     const first = await enqueueConfirmation(prisma, {

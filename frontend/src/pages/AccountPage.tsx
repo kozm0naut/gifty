@@ -6,7 +6,7 @@ import { Modal } from '../components/Modal';
 import { BrandMark } from '../components/BrandMark';
 
 /**
- * T049 [US7] — Account area (FR-014 / FR-028).
+ * T049 [US7] — Account area (003 FR-014 / 003 FR-028).
  *
  * Shows the signed-in user's profile and offers a single, explicit,
  * IRREVERSIBLE "Delete account" action. The confirmation names the finality —

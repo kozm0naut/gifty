@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createApp } from '../../src/app.js';
 
 /**
- * T019 — Trust-boundary contract tests (FR-003, FR-004, FR-012, SC-003, SC-005).
+ * T019 — Trust-boundary contract tests (003 FR-003, 003 FR-004, 003 FR-012, 003 SC-003, 003 SC-005).
  *
  * US2 independent test, contract form:
  *   - a page on a non-permitted origin gets NO Access-Control-Allow-Origin
@@ -40,7 +40,7 @@ afterEach(() => {
   process.env = savedEnv;
 });
 
-describe('trust boundary: closed-by-default CORS (FR-003, SC-003)', () => {
+describe('trust boundary: closed-by-default CORS (003 FR-003, 003 SC-003)', () => {
   it('production with CORS_ORIGINS unset sends no Access-Control-Allow-Origin', async () => {
     const app = await createApp();
     const res = await request(app).get('/healthz');
@@ -98,7 +98,7 @@ describe('trust boundary: closed-by-default CORS (FR-003, SC-003)', () => {
   });
 });
 
-describe('trust boundary: security headers (FR-004, FR-012, SC-005)', () => {
+describe('trust boundary: security headers (003 FR-004, 003 FR-012, 003 SC-005)', () => {
   it('X-Powered-By is absent on every response', async () => {
     const app = await createApp();
     const ok = await request(app).get('/healthz');
@@ -124,7 +124,7 @@ describe('trust boundary: security headers (FR-004, FR-012, SC-005)', () => {
     expect(csp).toContain("script-src 'self'");
     expect(csp).toContain("img-src 'self' data:");
     expect(csp).toContain("connect-src 'self'");
-    // The operator-permitted font source is explicitly allowed (FR-004) — both
+    // The operator-permitted font source is explicitly allowed (003 FR-004) — both
     // the font binaries (font-src) and the font stylesheet (style-src), since
     // the app loads a <link rel=stylesheet> from the font origin.
     expect(csp).toContain(

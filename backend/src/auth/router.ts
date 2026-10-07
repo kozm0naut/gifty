@@ -57,7 +57,7 @@ export function clearRefreshCookie(): string {
 
 /**
  * Precomputed bcrypt hash used ONLY to equalize response timing between an
- * unknown email and a wrong password (FR-020 constant-time guard). The value
+ * unknown email and a wrong password (003 FR-020 constant-time guard). The value
  * is never a real credential; it exists so both sign-in failure paths perform
  * exactly one bcrypt.compare and thus land in the same timing class.
  */
@@ -94,9 +94,9 @@ export function createAuthRouter() {
       const normalizedEmail = String(email).trim().toLowerCase();
       const ip = clientIp(req);
 
-      // Throttle per-source registration failures FIRST (FR-001). The 429 body
+      // Throttle per-source registration failures FIRST (003 FR-001). The 429 body
       // mirrors the stable 409 "already exists" signal so a rate-limited source
-      // cannot distinguish "throttled" from "email taken" (FR-020 / SC-002).
+      // cannot distinguish "throttled" from "email taken" (003 FR-020 / 003 SC-002).
       if (isRateLimited('register-source', ip)) {
         res.set('Retry-After', String(retryAfterSeconds()));
         void recordAuditEvent({
@@ -109,7 +109,7 @@ export function createAuthRouter() {
         return res.status(429).json({ message: 'A user with this email already exists' });
       }
 
-      // Password policy (FR-002): reject weak passwords with the stable message.
+      // Password policy (003 FR-002): reject weak passwords with the stable message.
       const policy = validatePasswordPolicy(String(password));
       if (!policy.ok) {
         void recordAuditEvent({
@@ -147,7 +147,7 @@ export function createAuthRouter() {
           },
         });
       } catch (err) {
-        // Concurrent registration of the same email (FR-020 edge case): exactly
+        // Concurrent registration of the same email (003 FR-020 edge case): exactly
         // one account wins; the loser gets the clean "already exists" signal.
         if (isUniqueViolation(err)) {
           recordFailure('register-source', ip);
@@ -163,10 +163,10 @@ export function createAuthRouter() {
         throw err;
       }
 
-      // Feature 003 (US5, FR-011 / SC-009): convert any pending
+      // Feature 003 (US5, 003 FR-011 / 003 SC-009): convert any pending
       // invitations addressed to this email into SharePermissions, in the
       // SAME transaction as the account creation (transactional — a failure
-      // rolls back the user too). Consent starts at `pending` (FR-021): the
+      // rolls back the user too). Consent starts at `pending` (003 FR-021): the
       // new user must make the name-disclosure choice themselves.
       const invitations = await prisma.pendingInvitation.findMany({
         where: { inviteeEmail: normalizedEmail, status: 'pending' },
@@ -203,11 +203,11 @@ export function createAuthRouter() {
         });
       }
 
-      // Feature 004 (US2, FR-003): issue a confirmation email for the new
+      // Feature 004 (US2, 004 FR-003): issue a confirmation email for the new
       // account — UNLESS the email feature is disabled, in which case the
-      // account auto-confirms (FR-016) and no email is sent.
+      // account auto-confirms (004 FR-015) and no email is sent.
       //
-      // T017 (FR-006 / lesson from T014): the user row already committed in
+      // T017 (004 FR-006 / lesson from T014): the user row already committed in
       // autocommit (single statement), so the token + enqueue are SEPARATE
       // best-effort writes on the base client — deliberately NOT in a
       // transaction. A failure here only means "no confirmation email yet";
@@ -238,14 +238,14 @@ export function createAuthRouter() {
             ip,
           });
         } catch (err) {
-          // FR-006: registration must not fail because of email.
+          // 004 FR-006: registration must not fail because of email.
           console.error(
             `[auth/register] confirmation enqueue failed (user=${user.id}, email=${normalizedEmail}):`,
             err instanceof Error ? err.message : String(err),
           );
         }
       } else {
-        // Disabled mode: auto-confirm the account (FR-016).
+        // Disabled mode: auto-confirm the account (004 FR-015).
         await prisma.user.update({
           where: { id: user.id },
           data: { verifiedAt: new Date() },
@@ -286,9 +286,9 @@ export function createAuthRouter() {
       const normalizedEmail = String(email ?? '').trim().toLowerCase();
       const ip = clientIp(req);
 
-      // Throttle sign-in on BOTH dimensions (FR-001): per-source (client IP)
+      // Throttle sign-in on BOTH dimensions (003 FR-001): per-source (client IP)
       // and per-account (email — defeats source-IP rotation). A 429 body is
-      // indistinguishable from a failed sign-in (FR-020 / SC-002).
+      // indistinguishable from a failed sign-in (003 FR-020 / 003 SC-002).
       if (
         isRateLimited('login-source', ip) ||
         (normalizedEmail && isRateLimited('login-account', normalizedEmail))
@@ -306,7 +306,7 @@ export function createAuthRouter() {
 
       const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-      // FR-020 constant-time guard: always perform exactly one bcrypt.compare,
+      // 003 FR-020 constant-time guard: always perform exactly one bcrypt.compare,
       // against a dummy hash when the account does not exist, so an unknown
       // email and a wrong password land in the same timing class.
       const hashToCheck = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
@@ -369,7 +369,7 @@ export function createAuthRouter() {
       const ip = (req.socket.remoteAddress ?? null) as string | null;
 
       if (!result.ok) {
-        // Audit the theft/expiry signal (FR-026) without exposing the token.
+        // Audit the theft/expiry signal (003 FR-026) without exposing the token.
         void recordAuditEvent({
           actorUserId: null,
           action: result.reason === 'stale_refresh' ? 'session_reuse_detected' : 'session_revoked',
@@ -405,7 +405,7 @@ export function createAuthRouter() {
     }
   });
 
-  // Feature 004 (US2, FR-014): re-issue the confirmation email for an
+  // Feature 004 (US2, 004 FR-014): re-issue the confirmation email for an
   // unconfirmed account that holds a live session.
   //   - 401 — no live session (the credential is the `gifty_access` cookie).
   //   - 403 — the account is already confirmed (nothing to resend).
@@ -447,7 +447,7 @@ export function createAuthRouter() {
         return res.status(403).json({ message: 'Your email is already confirmed.' });
       }
 
-      // Per-account resend budget (FR-014). Counted on every successful send
+      // Per-account resend budget (004 FR-014). Counted on every successful send
       // so a legitimate user is still capped at a few per window.
       const ip = clientIp(req);
       if (isRateLimited('resend-confirmation', userId)) {
@@ -466,7 +466,7 @@ export function createAuthRouter() {
       }
       recordFailure('resend-confirmation', userId);
 
-      // Re-issue (supersedes) + enqueue as a separate best-effort write (FR-006).
+      // Re-issue (supersedes) + enqueue as a separate best-effort write (004 FR-006).
       try {
         const token = await issueToken(userId);
         const link = buildConfirmationLink(token);

@@ -1,15 +1,15 @@
-# T027 — FR-009 (clarification 2026-09-22): "cached builds work offline".
+# T027 — 002 FR-009 (clarification 2026-09-22): "cached builds work offline".
 #
 # Proves the offline leg with hard evidence:
 #   1. WARM  — one normal `docker compose build` populates the image/layer
-#              cache (first build may pull; FR-009 allows that).
+#              cache (first build may pull; 002 FR-009 allows that).
 #   2. PROVE — `docker buildx build --network=none` rebuilds the same image
 #              with the build sandbox's network DISABLED. Every step MUST be
 #              served from cache; any step needing an external download fails
 #              the build, failing the job.
 #   3. RUN   — `docker compose up -d` + readiness proves the cached image
 #              actually serves the app.
-name: Offline cached build (FR-009)
+name: Offline cached build (002 FR-009)
 
 on:
   push:
@@ -28,14 +28,14 @@ jobs:
         uses: actions/checkout@v5
 
       # Credentials: JWT_SECRET AND POSTGRES_PASSWORD are required with no
-      # default (Constitution §IV / FR-006). A clean runner has no .env, so seed
+      # default (Constitution §IV / 003 FR-006). A clean runner has no .env, so seed
       # them once via the SAME mechanism local `npm run docker:up` uses
       # (scripts/ensure-env.mjs — absent-only, idempotent, strong random). The
       # .env persists across this job's steps, so the later `up` reuses it.
       - name: Seed run-scoped credentials (POSTGRES_PASSWORD + JWT_SECRET)
         run: node scripts/ensure-env.mjs
 
-      # 1. WARM: allowed to pull (FR-009 permits first-build network access).
+      # 1. WARM: allowed to pull (002 FR-009 permits first-build network access).
       # The compose model is validated at build time (credentials now in .env).
       - name: Warm build (populates the cache)
         run: |

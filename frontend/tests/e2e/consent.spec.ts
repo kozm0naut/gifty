@@ -36,8 +36,8 @@ async function switchUser(page: Page, email: string, password: string): Promise<
  * Flow: two recipients (A claims, B views) + owner. A's name must be
  * invisible to B until A consents to name disclosure on the list; the
  * consent prompt appears once, and A can flip consent back and forth via
- * the self-serve control in the Sharing section (FR-021/FR-022/FR-023/FR-024,
- * SC-008).
+ * the self-serve control in the Sharing section (003 FR-021/003 FR-022/003 FR-023/003 FR-024,
+ * 003 SC-008).
  */
 
 test.describe('consent-gated identity disclosure (US5, T033)', () => {
@@ -58,19 +58,19 @@ test.describe('consent-gated identity disclosure (US5, T033)', () => {
     // Claimer claims the item (before consenting to disclosure).
     await apiClaimItem(claimer.cookie, item.id);
 
-    // Viewer: the claim state is visible, but the claimant identity is not (FR-024).
+    // Viewer: the claim state is visible, but the claimant identity is not (003 FR-024).
     await switchUser(page, viewerEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     await expect(page.getByText('claimed', { exact: false }).first()).toBeVisible();
     await expect(page.getByText('Claimer')).toHaveCount(0);
 
-    // Claimer opens the list: the one-time consent prompt appears (FR-022).
+    // Claimer opens the list: the one-time consent prompt appears (003 FR-022).
     await switchUser(page, claimerEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     const prompt = page.getByRole('dialog', { name: /name disclosure/i });
     await expect(prompt).toBeVisible();
 
-    // Affirm → the claimer's name becomes visible to the viewer (FR-022/FR-024).
+    // Affirm → the claimer's name becomes visible to the viewer (003 FR-022/003 FR-024).
     await prompt.getByRole('button', { name: /reveal/i }).click();
     await expect(prompt).toBeHidden();
 
@@ -83,7 +83,7 @@ test.describe('consent-gated identity disclosure (US5, T033)', () => {
     await page.goto(`/list/${list.id}`);
     await expect(page.getByRole('dialog', { name: /name disclosure/i })).toHaveCount(0);
 
-    // Self-serve control (FR-023): the claimer reopens the consent prompt…
+    // Self-serve control (003 FR-023): the claimer reopens the consent prompt…
     const toggle = page.getByRole('button', { name: /hide my name/i });
     await expect(toggle).toBeVisible();
     await toggle.click();
@@ -116,7 +116,7 @@ test.describe('consent-gated identity disclosure (US5, T033)', () => {
 
     await apiClaimItem(claimer.cookie, item.id);
 
-    // Claimer declines disclosure (FR-021/FR-022).
+    // Claimer declines disclosure (003 FR-021/003 FR-022).
     await switchUser(page, claimerEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     const prompt = page.getByRole('dialog', { name: /name disclosure/i });
@@ -128,7 +128,7 @@ test.describe('consent-gated identity disclosure (US5, T033)', () => {
     await page.goto(`/list/${list.id}`);
     await expect(page.getByRole('dialog', { name: /name disclosure/i })).toHaveCount(0);
 
-    // …and the viewer never learns the claimant's identity (SC-008).
+    // …and the viewer never learns the claimant's identity (003 SC-008).
     await switchUser(page, viewerEmail, E2E_PASSWORD);
     await page.goto(`/list/${list.id}`);
     await expect(page.getByText('claimed', { exact: false }).first()).toBeVisible();

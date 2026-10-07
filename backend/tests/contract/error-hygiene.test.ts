@@ -4,16 +4,16 @@ import { createApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config/index.js';
 
 /**
- * T040 — Error-hygiene contract tests (FR-011, FR-012, FR-020).
+ * T040 — Error-hygiene contract tests (003 FR-011, 003 FR-012, 003 FR-020).
  *
  * US6 independent test, contract form:
  *   - an induced internal (5xx) failure returns the single stable production
  *     body `{ "error": "An internal error occurred." }` with no stack trace,
- *     file path, query, or driver detail (FR-011);
+ *     file path, query, or driver detail (003 FR-011);
  *   - `X-Powered-By` is absent on every response, including error responses
- *     (FR-012);
+ *     (003 FR-012);
  *   - sign-in failures (unknown email vs wrong password vs rate-limited) are
- *     uniform in status + body — no account-existence hint (FR-020, SC-002).
+ *     uniform in status + body — no account-existence hint (003 FR-020, 003 SC-002).
  *
  * The app reads NODE_ENV / rate-limit budgets at createApp() time, so each
  * case sets its environment and builds a fresh app.
@@ -36,7 +36,7 @@ beforeEach(() => {
   // does not trip.
   process.env.EMAIL_ENABLED = 'false';
   // Register the 5xx probe route; tighten the per-source sign-in budget (fast 429).
-  // FR-001 invariant: register budget must stay strictly below the login budget.
+  // 003 FR-001 invariant: register budget must stay strictly below the login budget.
   process.env.GIFTY_ENABLE_TEST_PROBES = '1';
   process.env.LOGIN_MAX_FAILURES_PER_SOURCE = '2';
   process.env.REGISTER_MAX_FAILURES_PER_SOURCE = '1';
@@ -54,8 +54,8 @@ async function registerUser(app: any, email: string, password = 'Password123!') 
     .send({ email, password, displayName: 'Hygiene' });
 }
 
-describe('T040 error hygiene (FR-011, FR-012)', () => {
-  it('an induced internal failure returns the single stable body with no internal detail (FR-011)', async () => {
+describe('T040 error hygiene (003 FR-011, 003 FR-012)', () => {
+  it('an induced internal failure returns the single stable body with no internal detail (003 FR-011)', async () => {
     const app = await createApp();
     const res = await request(app).post('/__test/internal-error');
 
@@ -70,7 +70,7 @@ describe('T040 error hygiene (FR-011, FR-012)', () => {
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
 
-  it('X-Powered-By is absent on every response, including 4xx and 5xx (FR-012)', async () => {
+  it('X-Powered-By is absent on every response, including 4xx and 5xx (003 FR-012)', async () => {
     const app = await createApp();
     const ok = await request(app).get('/healthz');
     // A non-GET to an unregistered path yields a true 404 (the production SPA
@@ -86,7 +86,7 @@ describe('T040 error hygiene (FR-011, FR-012)', () => {
     }
   });
 
-  it('sign-in failures are uniform: unknown email, wrong password, and rate-limited (FR-020)', async () => {
+  it('sign-in failures are uniform: unknown email, wrong password, and rate-limited (003 FR-020)', async () => {
     const app = await createApp();
     const known = `hyg-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
     await registerUser(app, known);
@@ -109,15 +109,15 @@ describe('T040 error hygiene (FR-011, FR-012)', () => {
     expect(unknown.status).toBe(401);
     expect(wrong.status).toBe(401);
     expect(limited.status).toBe(429);
-    // All three carry the same stable body — no account-existence hint (SC-002).
+    // All three carry the same stable body — no account-existence hint (003 SC-002).
     expect(unknown.body).toEqual(wrong.body);
     expect(limited.body).toEqual(unknown.body);
   });
 
-  it('does not advertise the framework or server name (FR-012)', async () => {
+  it('does not advertise the framework or server name (003 FR-012)', async () => {
     const app = await createApp();
     const res = await request(app).get('/healthz');
-    // FR-012: the Server header must not fingerprint the stack — no framework
+    // 003 FR-012: the Server header must not fingerprint the stack — no framework
     // (Express) or runtime (Node.js) identifier. It may be absent or a neutral
     // product token; it must not reveal the implementation.
     const server = res.headers['server'];

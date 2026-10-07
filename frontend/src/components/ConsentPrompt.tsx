@@ -11,11 +11,11 @@ interface ConsentPromptProps {
 }
 
 /**
- * US5 (FR-022): one-time name-disclosure consent prompt, shown to a recipient
+ * US5 (003 FR-022): one-time name-disclosure consent prompt, shown to a recipient
  * on the first open of a shared list they have not yet consented on.
  *
  * - The prompt appears only when `consent === 'pending'`.
- * - "Reveal my name" → `revealed` (FR-023). "Keep me anonymous" → `declined`.
+ * - "Reveal my name" → `revealed` (003 FR-023). "Keep me anonymous" → `declined`.
  * - Dismissing without choosing (X / backdrop / Escape) is NOT a choice: it
  *   leaves consent `pending` (no POST), dismisses the modal for this session,
  *   and the prompt reappears the next time the list is opened (the local

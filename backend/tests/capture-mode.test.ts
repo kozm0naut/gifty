@@ -1,5 +1,5 @@
 /**
- * T026 — US5: Developer and Test Mail Capture (FR-008, SC-003)
+ * T026 — US5: Developer and Test Mail Capture (004 FR-008, 004 SC-003)
  *
  *  1. invite email captured  → capturedEmails() entry with correct to/subject/text/link (home, no token)
  *  2. confirmation captured  → entry with a `/confirm?token=` link
@@ -90,7 +90,7 @@ async function share(app: App, listId: string, ownerCookie: string, recipientEma
     .send({ recipientEmail, permission: 'shared' });
 }
 
-describe('US5 — Developer and Test Mail Capture (FR-008, SC-003)', () => {
+describe('US5 — Developer and Test Mail Capture (004 FR-008, 004 SC-003)', () => {
   let app: App;
   const savedEnv: Record<string, string | undefined> = {};
 
@@ -163,7 +163,7 @@ describe('US5 — Developer and Test Mail Capture (FR-008, SC-003)', () => {
     expect(entry.to).toBe(recipient);
     expect(entry.subject).toBe("You've been shared a gift list");
     expect(entry.text).toContain('shared their Gifty gift list');
-    // Home page, no token, no deep link (FR-013).
+    // Home page, no token, no deep link (004 FR-013).
     expect(entry.link).toBe('http://localhost:8080/');
     expect(entry.link).not.toContain('token=');
   });

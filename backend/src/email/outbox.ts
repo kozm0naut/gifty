@@ -4,10 +4,10 @@
  *
  * Enqueue (synchronous, in the caller's transaction):
  *   - `enqueueInvite`      — `@@unique([listId, recipientEmail])`; a duplicate
- *     (P2002) is a **no-op** (FR-012).
+ *     (P2002) is a **no-op** (004 FR-005).
  *   - `enqueueConfirmation`— `listId` NULL → unique not enforced → one per
- *     (re)send (FR-011).
- *   - Neither is enqueued in the disabled mode (FR-016) — callers guard.
+ *     (re)send (004 FR-014).
+ *   - Neither is enqueued in the disabled mode (004 FR-015) — callers guard.
  *
  * Drainer (in-process, research D8): every `drainIntervalMs`, select
  * due `queued` rows (FOR UPDATE SKIP LOCKED via an atomic status flip), send
@@ -31,13 +31,13 @@ export interface EnqueueResult {
    *  returns the *existing* row id). */
   outboxMessageId: string;
   /** Whether a NEW row was inserted (false → the unique constraint matched an
-   *  existing (list, recipient) invite and this was a no-op, FR-012). */
+   *  existing (list, recipient) invite and this was a no-op, 004 FR-005). */
   inserted: boolean;
 }
 
 /**
  * Enqueue an invite email for a (list, recipient) pair. A duplicate is a
- * **no-op** (FR-012): the unique constraint rejects it (P2002) and we resolve
+ * **no-op** (004 FR-005): the unique constraint rejects it (P2002) and we resolve
  * to the existing row. Never rejects on the duplicate path.
  */
 export async function enqueueInvite(
@@ -60,7 +60,7 @@ export async function enqueueInvite(
   } catch (err) {
     const code = (err as { code?: string })?.code;
     if (code === 'P2002') {
-      // Duplicate (list, recipient) — no-op (FR-012). Resolve to the existing
+      // Duplicate (list, recipient) — no-op (004 FR-005). Resolve to the existing
       // row so callers can report a stable id.
       const existing = await tx.outboxMessage.findUnique({
         where: { listId_recipientEmail: { listId: input.listId, recipientEmail: input.recipientEmail } },
@@ -74,7 +74,7 @@ export async function enqueueInvite(
 
 /**
  * Enqueue a confirmation email. `listId` is NULL, so the unique constraint does
- * not apply and each (re)send produces a new row (FR-011).
+ * not apply and each (re)send produces a new row (004 FR-014).
  *
  * Re-issuing supersedes any prior queued/sending confirmation for the same
  * user: the old token is invalid (the new hash overwrites it), so delivering

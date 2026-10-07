@@ -352,15 +352,15 @@ export function createItemRouter() {
     const isOwner = list?.ownerUserId === req.user?.id;
 
     if (isOwner) {
-      // Owner-privacy boundary (FR-009 / SC-005): strip all claim/purchase
+      // Owner-privacy boundary (001 FR-009 / 001 SC-005): strip all claim/purchase
       // state and identity from the owner's own list.
       const visibleItems = items.map(projectOwnerVisibleItem);
       return res.status(200).json({ items: visibleItems });
     }
 
-    // Recipient view (FR-009): expose full state plus the consent-aware
+    // Recipient view (001 FR-009): expose full state plus the consent-aware
     // claimant display name so shared recipients can see who acted, honoring
-    // each claimant's name-disclosure consent on THIS list (FR-021/FR-024).
+    // each claimant's name-disclosure consent on THIS list (003 FR-021/003 FR-024).
     const names = await resolveConsentedIdentityNames(items, listId);
     const visibleItems = decorateItemIdentity(items, names);
     return res.status(200).json({ items: visibleItems });

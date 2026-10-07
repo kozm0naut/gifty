@@ -3,7 +3,7 @@ import { validateConfig, loadConfig } from './config/index.js';
 import { startDrainer, stopDrainer } from './email/outbox.js';
 
 // Fail fast on startup if required config (e.g. JWT_SECRET in production) is
-// missing — never serve with a known/default secret (Constitution §IV, FR-006).
+// missing — never serve with a known/default secret (Constitution §IV, 003 FR-006).
 // Feature 004 adds the production email gate (EMAIL_ENABLED + RESEND_API_KEY).
 validateConfig();
 
@@ -18,7 +18,7 @@ if (emailMode === 'live') {
   console.log('[email] mode: capture (dev/test) — emails are captured in-memory, no network I/O');
 } else {
   console.warn(
-    '[email] mode: disabled — accounts auto-confirm on registration and NO emails are sent (FR-016)',
+    '[email] mode: disabled — accounts auto-confirm on registration and NO emails are sent (004 FR-015)',
   );
 }
 

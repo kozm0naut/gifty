@@ -16,13 +16,13 @@ export type User = {
   verified?: boolean;
 };
 
-/** FR-027 notice surfaced on the sign-in page after a session termination. */
+/** 003 FR-027 notice surfaced on the sign-in page after a session termination. */
 export interface SessionNotice {
   message: string;
-  /** True when the termination was a refresh-token-reuse (theft) signal (FR-026). */
+  /** True when the termination was a refresh-token-reuse (theft) signal (003 FR-026). */
   security: boolean;
   /**
-   * Presentation hint for the sign-in page. 'security' (red, FR-027 theft
+   * Presentation hint for the sign-in page. 'security' (red, 003 FR-027 theft
    * signal), 'warning' (yellow, expired session), 'info' (green, positive
    * confirmations: signed out / account removed).
    */
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionNotice(null);
   }, []);
 
-  // Sign out (FR-008): the server revokes the session family and clears
+  // Sign out (003 FR-008): the server revokes the session family and clears
   // both HttpOnly cookies; we clear local state regardless so the UI lands
   // on the sign-in page even if the request fails.
   const logout = useCallback(async () => {
@@ -147,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // If the API reports the session is no longer valid (401 that survived a
   // refresh), drop the local auth state so ProtectedRoute redirects to the
-  // sign-in page, and surface the FR-027 notice (strong wording when the
+  // sign-in page, and surface the 003 FR-027 notice (strong wording when the
   // termination was a refresh-token-reuse / theft signal).
   useEffect(() => {
     const handleSessionExpired = (event: Event) => {

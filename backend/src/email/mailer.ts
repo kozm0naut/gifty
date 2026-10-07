@@ -6,7 +6,7 @@
  *     `https://api.resend.com/emails` via the Node 22 global `fetch` (no SDK).
  *   - `CaptureMailer`  — the dev/test stub. Zero network I/O; holds captured
  *     messages in an in-memory buffer and logs each in a stable, greppable
- *     shape (US5, SC-003).
+ *     shape (US5, 004 SC-003).
  *
  * `getMailer()` resolves the active implementation from the config sending
  * mode (T008): live → Resend, capture → Capture, disabled → a no-op (nothing
@@ -16,7 +16,7 @@
  *
  * The `meta` argument is optional and provider-agnostic: Resend ignores it,
  * while the CaptureMailer records `kind` + `link` so `capturedEmails()` can
- * surface the shape tests assert (FR-001/FR-003).
+ * surface the shape tests assert (004 FR-001/004 FR-003).
  */
 
 import { loadConfig } from '../config/index.js';
@@ -110,7 +110,7 @@ export interface CapturedEmail {
 }
 
 /**
- * The dev/test capture stub (research D1, US5, SC-003). Zero network I/O:
+ * The dev/test capture stub (research D1, US5, 004 SC-003). Zero network I/O:
  * it records each message in an in-memory buffer and logs it in a stable,
  * greppable shape. The test hooks (`capturedEmails` / `resetCapturedEmails`)
  * are only reachable when the operator (or a test) has chosen this stub.
@@ -134,7 +134,7 @@ export class CaptureMailer implements Mailer {
       link,
     };
     this.buffer.push(entry);
-    // Stable, greppable shape (SC-003): [email:capture] kind=… to=… subject=…
+    // Stable, greppable shape (004 SC-003): [email:capture] kind=… to=… subject=…
     // The link is logged for developer convenience (this is a local, non-
     // production stub; the raw-token sensitivity concern is about the *live*
     // path and the DB row, not local dev logging).
@@ -192,7 +192,7 @@ export function getMailer(): Mailer {
 /**
  * Access the shared capture buffer. Only meaningful in capture mode (dev/test);
  * in any other mode it returns an empty array and reset is a no-op — the hooks
- * exist but never observe live sends (SC-003 discipline).
+ * exist but never observe live sends (004 SC-003 discipline).
  */
 export function capturedEmails(): CapturedEmail[] {
   return loadConfig().email.mode === 'capture' ? captureMailer.capturedEmails() : [];

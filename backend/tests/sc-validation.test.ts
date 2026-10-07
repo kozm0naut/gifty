@@ -71,15 +71,15 @@ beforeEach(async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// T031 / SC-003: ≥95% of valid share and claim actions complete without errors
+// T031 / 001 SC-003: ≥95% of valid share and claim actions complete without errors
 // ─────────────────────────────────────────────────────────────────────────────
-describe('SC-003: Share and claim success rate (≥95%)', () => {
+describe('001 SC-003: Share and claim success rate (≥95%)', () => {
   it('completes a full share → claim cycle without errors', async () => {
     const app = await createApp();
     const owner = await register(app, 'sc3-owner', 'Owner');
     const recipient = await register(app, 'sc3-recipient', 'Recipient');
 
-    const listId = await createList(app, owner, 'SC-003 List');
+    const listId = await createList(app, owner, '001 SC-003 List');
     const shareRes = await shareList(app, owner, listId, recipient);
     expect(shareRes.status).toBe(201);
 
@@ -98,7 +98,7 @@ describe('SC-003: Share and claim success rate (≥95%)', () => {
     const total = 10;
 
     for (let i = 0; i < total; i++) {
-      const listId = await createList(app, owner, `SC-003 List ${i}`);
+      const listId = await createList(app, owner, `001 SC-003 List ${i}`);
       const shareRes = await shareList(app, owner, listId, recipient);
       if (shareRes.status !== 201) continue;
 
@@ -113,16 +113,16 @@ describe('SC-003: Share and claim success rate (≥95%)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// T032 / SC-004: ≥99% duplicate-claim prevention
+// T032 / 001 SC-004: ≥99% duplicate-claim prevention
 // ─────────────────────────────────────────────────────────────────────────────
-describe('SC-004: Duplicate-claim race protection (≥99%)', () => {
+describe('001 SC-004: Duplicate-claim race protection (≥99%)', () => {
   it('allows exactly one winner when two recipients claim simultaneously', async () => {
     const app = await createApp();
     const owner = await register(app, 'sc4-owner', 'Owner');
     const r1 = await register(app, 'sc4-r1', 'Recipient 1');
     const r2 = await register(app, 'sc4-r2', 'Recipient 2');
 
-    const listId = await createList(app, owner, 'SC-004 List');
+    const listId = await createList(app, owner, '001 SC-004 List');
     await shareList(app, owner, listId, r1);
     await shareList(app, owner, listId, r2);
     const itemId = await createItem(app, owner, listId, 'Contested Item');
@@ -151,7 +151,7 @@ describe('SC-004: Duplicate-claim race protection (≥99%)', () => {
     const totalRounds = 20;
 
     for (let i = 0; i < totalRounds; i++) {
-      const listId = await createList(app, owner, `SC-004 Race ${i}`);
+      const listId = await createList(app, owner, `001 SC-004 Race ${i}`);
       await shareList(app, owner, listId, r1);
       await shareList(app, owner, listId, r2);
       const itemId = await createItem(app, owner, listId, `Race Item ${i}`);
@@ -172,15 +172,15 @@ describe('SC-004: Duplicate-claim race protection (≥99%)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// T033 / SC-005: Owner privacy boundary enforcement
+// T033 / 001 SC-005: Owner privacy boundary enforcement
 // ─────────────────────────────────────────────────────────────────────────────
-describe('SC-005: Owner privacy boundary', () => {
+describe('001 SC-005: Owner privacy boundary', () => {
   it('hides claimant identity and state from the list owner', async () => {
     const app = await createApp();
     const owner = await register(app, 'sc5-owner', 'Owner');
     const recipient = await register(app, 'sc5-recipient', 'Recipient');
 
-    const listId = await createList(app, owner, 'SC-005 List');
+    const listId = await createList(app, owner, '001 SC-005 List');
     await shareList(app, owner, listId, recipient);
     const itemId = await createItem(app, owner, listId, 'Secret Gift');
 
@@ -201,7 +201,7 @@ describe('SC-005: Owner privacy boundary', () => {
     const owner = await register(app, 'sc5-p-owner', 'Owner');
     const recipient = await register(app, 'sc5-p-recipient', 'Recipient');
 
-    const listId = await createList(app, owner, 'SC-005 Purchase List');
+    const listId = await createList(app, owner, '001 SC-005 Purchase List');
     await shareList(app, owner, listId, recipient);
     const itemId = await createItem(app, owner, listId, 'Purchased Gift');
 
@@ -223,7 +223,7 @@ describe('SC-005: Owner privacy boundary', () => {
     const owner = await register(app, 'sc5-dash-owner', 'Owner');
     const recipient = await register(app, 'sc5-dash-recipient', 'Recipient');
 
-    const listId = await createList(app, owner, 'SC-005 Dashboard List');
+    const listId = await createList(app, owner, '001 SC-005 Dashboard List');
     await shareList(app, owner, listId, recipient);
     const itemId = await createItem(app, owner, listId, 'Dashboard Gift');
 
@@ -248,7 +248,7 @@ describe('SC-005: Owner privacy boundary', () => {
     const r1 = await register(app, 'sc5-r1', 'R1');
     const r2 = await register(app, 'sc5-r2', 'R2');
 
-    const listId = await createList(app, owner, 'SC-005 Recipient List');
+    const listId = await createList(app, owner, '001 SC-005 Recipient List');
     await shareList(app, owner, listId, r1);
     await shareList(app, owner, listId, r2);
     const itemId = await createItem(app, owner, listId, 'Shared Gift');
@@ -280,7 +280,7 @@ describe('SC-005: Owner privacy boundary', () => {
     await claimItem(app, r1, itemId);
     await purchaseItem(app, r1, itemId);
 
-    // US5 (FR-021/FR-024): the claimant's name is only visible to co-recipients
+    // US5 (003 FR-021/003 FR-024): the claimant's name is only visible to co-recipients
     // after the claimant consents to name disclosure on this list.
     const consentRes = await request(app)
       .post(`/lists/${listId}/consent`)
@@ -325,15 +325,15 @@ describe('SC-005: Owner privacy boundary', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// T034 / SC-006: Permission and lifecycle update coverage (≥90%)
+// T034 / 001 SC-006: Permission and lifecycle update coverage (≥90%)
 // ─────────────────────────────────────────────────────────────────────────────
-describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
+describe('001 SC-006: Permission and lifecycle update coverage (≥90%)', () => {
   it('supports share → revoke → re-share cycle', async () => {
     const app = await createApp();
     const owner = await register(app, 'sc6-owner', 'Owner');
     const recipient = await register(app, 'sc6-recipient', 'Recipient');
 
-    const listId = await createList(app, owner, 'SC-006 List');
+    const listId = await createList(app, owner, '001 SC-006 List');
     const shareRes = await shareList(app, owner, listId, recipient);
     expect(shareRes.status).toBe(201);
 
@@ -356,7 +356,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
     const owner = await register(app, 'sc6-c-owner', 'Owner');
     const recipient = await register(app, 'sc6-c-recipient', 'Recipient');
 
-    const listId = await createList(app, owner, 'SC-006 Claim List');
+    const listId = await createList(app, owner, '001 SC-006 Claim List');
     await shareList(app, owner, listId, recipient);
     const itemId = await createItem(app, owner, listId, 'Cycle Item');
 
@@ -379,7 +379,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
     const owner = await register(app, 'sc6-p-owner', 'Owner');
     const recipient = await register(app, 'sc6-p-recipient', 'Recipient');
 
-    const listId = await createList(app, owner, 'SC-006 Purchase List');
+    const listId = await createList(app, owner, '001 SC-006 Purchase List');
     await shareList(app, owner, listId, recipient);
     const itemId = await createItem(app, owner, listId, 'Purchase Cycle Item');
 
@@ -406,7 +406,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
     const recipient = await register(app, 'sc6-b-recipient', 'Recipient');
     const outsider = await register(app, 'sc6-b-outsider', 'Outsider');
 
-    const listId = await createList(app, owner, 'SC-006 Blocked List');
+    const listId = await createList(app, owner, '001 SC-006 Blocked List');
     await shareList(app, owner, listId, recipient);
     const itemId = await createItem(app, owner, listId, 'Blocked Item');
 
@@ -452,7 +452,7 @@ describe('SC-006: Permission and lifecycle update coverage (≥90%)', () => {
     const total = 10;
 
     for (let i = 0; i < total; i++) {
-      const listId = await createList(app, owner, `SC-006 Mix ${i}`);
+      const listId = await createList(app, owner, `001 SC-006 Mix ${i}`);
       const shareRes = await shareList(app, owner, listId, recipient);
       if (shareRes.status !== 201) continue;
 
