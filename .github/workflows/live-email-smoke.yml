@@ -1,0 +1,99 @@
+# Live email smoke test (feature 004) — MANUAL ONLY.
+#
+# Regular CI runs in capture mode (offline, zero provider calls — 004 FR-008).
+# This is the sole live-delivery path: it boots the stack with the real Resend
+# credentials (exercising the 004 FR-009 boot gate with a genuine key), registers
+# a smoke account addressed to the inbox you supply at run time, and asserts the
+# confirmation email reaches `sent` in the outbox — i.e., Resend accepted it.
+#
+# Trigger: GitHub Actions tab → "Live email smoke" → Run workflow.
+# Use after deploying, after rotating the Resend key, or when confirming
+# Resend-service recovery. One run = one real email to the address you type in.
+name: Live email smoke (004)
+
+on:
+  workflow_dispatch:
+    inputs:
+      smoke_email:
+        description: 'Inbox that will receive the confirmation email (a real address you control)'
+        required: true
+        type: string
+
+jobs:
+  live-smoke:
+    name: Boot live, register, assert outbox sent
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Live mode: enabled + real key + no capture override → ResendMailer
+    # (backend/src/config mode resolution). The key comes from repo secrets,
+    # the non-sensitive config from repo variables.
+    env:
+      EMAIL_TRANSPORT: resend
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      RESEND_FROM: ${{ vars.RESEND_FROM }}
+      GIFTY_PUBLIC_ORIGIN: ${{ vars.GIFTY_PUBLIC_ORIGIN }}
+      SMOKE_EMAIL: ${{ inputs.smoke_email }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Seed run-scoped credentials (POSTGRES_PASSWORD + JWT_SECRET)
+        run: node scripts/ensure-env.mjs
+
+      - name: Start the stack in LIVE email mode
+        run: |
+          set -eu
+          docker compose up --build -d
+
+      - name: Wait for readiness (GET /healthz -> 200 within 2 minutes)
+        run: |
+          set -eu
+          for i in $(seq 1 120); do
+            if curl -fs http://localhost:8080/healthz > /dev/null 2>&1; then
+              echo "Gifty is ready at http://localhost:8080 (live email mode)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Gifty did not report ready within 2 minutes"
+          docker compose logs --no-color
+          exit 1
+
+      - name: Register smoke account (enqueues confirmation email)
+        run: |
+          set -eu
+          email="$SMOKE_EMAIL"
+          if ! grep -Eq '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' <<<"$email"; then
+            echo "::error::smoke_email is not a valid email address"
+            exit 1
+          fi
+          # 003 FR-002 password policy: 8+ chars, upper, lower, digit, symbol.
+          curl -fs -X POST http://localhost:8080/auth/register \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg e "$email" --arg p 'Smoke!Pass123' --arg n 'Live Smoke' \
+                 '{email:$e, password:$p, displayName:$n}')"
+          echo "Registered $email — confirmation email enqueued."
+
+      - name: Poll outbox until confirmation is `sent` (or `failed`)
+        run: |
+          set -eu
+          for i in $(seq 1 60); do
+            row=$(docker compose exec -T postgres psql -U gifty -d gifty -tA \
+              -c "SELECT \"status\" FROM \"OutboxMessage\" WHERE \"kind\" = 'confirmation' AND lower(\"recipientEmail\") = lower('${SMOKE_EMAIL}') ORDER BY \"createdAt\" DESC LIMIT 1;" \
+              || true)
+            case "$row" in
+              sent)   echo "PASS — confirmation email accepted by Resend (outbox status=sent)"; exit 0;;
+              failed) echo "::error::confirmation email reached terminal failed state"; \
+                      docker compose logs --no-color; exit 1;;
+            esac
+            sleep 2
+          done
+          echo "::error::confirmation email did not reach sent within 2 minutes"
+          docker compose exec -T postgres psql -U gifty -d gifty -tA \
+            -c "SELECT id, status, attempts, lastAttemptAt FROM \"OutboxMessage\" ORDER BY \"createdAt\" DESC LIMIT 5;"
+          docker compose logs --no-color
+          exit 1
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v || true

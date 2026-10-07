@@ -23,6 +23,11 @@ jobs:
     name: Warm cache, then rebuild with network disabled
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Email: force capture mode in CI — offline, zero provider calls, deterministic
+    # (004 FR-008). No repo secret needed here; real Resend delivery is exercised
+    # only by the manual `live-email-smoke` workflow.
+    env:
+      EMAIL_TRANSPORT: capture
     steps:
       - name: Checkout
         uses: actions/checkout@v5
