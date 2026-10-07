@@ -85,6 +85,60 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   return data as T;
 }
 
+/**
+ * Run a read-only SQL query against the stack's internal Postgres container.
+ * `docker compose exec -T postgres psql -U gifty -d gifty -tA -c <q>`.
+ * Used only by tests that must read server-side state (the captured
+ * confirmation token lives in the outbox row, inside the container).
+ */
+async function runPsql(query: string): Promise<string> {
+  const { execFile } = await import('node:child_process');
+  const repoRoot = process.env.GIFTY_REPO_ROOT || '';
+  const args = [
+    'compose',
+    ...(repoRoot ? ['-f', `${repoRoot}/docker-compose.yml`, '--project-directory', repoRoot] : []),
+    'exec', '-T', 'postgres', 'psql', '-U', 'gifty', '-d', 'gifty', '-tA', '-c', query,
+  ];
+  return new Promise<string>((resolve, reject) => {
+    execFile('docker', args, { maxBuffer: 1024 * 1024, timeout: 30_000 }, (err, stdout, stderr) => {
+      if (err) reject(new Error(`psql failed: ${err.message}\n${stderr || ''}`));
+      else resolve(stdout);
+    });
+  });
+}
+
+/**
+ * Confirm a freshly-registered account by following its captured confirmation
+ * link (the token is read from the durable outbox row). No-op when the account
+ * is already verified (email disabled → register auto-confirms, no outbox row).
+ *
+ * With email enabled (capture/live mode) registration now yields an UNCONFIRMED
+ * account and the gated list routes 403 until it confirms. The pre-email e2e
+ * specs assume confirmed accounts, so we confirm here to keep them green against
+ * a capture-mode stack — this only adds a confirmation step and does not change
+ * the session/consent/claim flows those specs exercise.
+ */
+export async function confirmAccountIfUnverified(email: string, cookie?: string): Promise<void> {
+  let token = '';
+  for (let i = 0; i < 6 && !token; i++) {
+    try {
+      // The backend normalizes emails to lowercase; compare case-insensitively.
+      const q = `SELECT "bodyText" FROM "OutboxMessage" WHERE "kind" = 'confirmation' AND lower("recipientEmail") = lower('${email}') ORDER BY "createdAt" DESC LIMIT 1;`;
+      const out = await runPsql(q);
+      const m = out.match(/confirm\?token=([^\s&"'<>]+)/);
+      if (m) token = decodeURIComponent(m[1]);
+    } catch {
+      /* retry on transient exec failure */
+    }
+    if (!token) await new Promise((r) => setTimeout(r, 400));
+  }
+  if (!token) return; // no captured confirmation email → already verified (email disabled)
+  await apiFetch<unknown>(`/confirm?token=${encodeURIComponent(token)}`, {
+    method: 'GET',
+    cookie,
+  });
+}
+
 export async function apiRegister(
   email: string,
   password: string,
@@ -98,6 +152,16 @@ export async function apiRegister(
   const data = (await response.json().catch(() => ({}))) as { user: ApiUser };
   if (!response.ok || !data?.user) {
     throw new Error(`API ${response.status}: registration failed`);
+  }
+  if (data.user.verified !== true) {
+    const cookie = sessionFrom(response, data.user).cookie;
+    await confirmAccountIfUnverified(email, cookie);
+    try {
+      const acct = await apiFetch<{ user?: ApiUser }>('/account', { method: 'GET', cookie });
+      if (acct.user) data.user = acct.user;
+    } catch {
+      /* keep the registration response's user if the refresh fails */
+    }
   }
   return sessionFrom(response, data.user);
 }

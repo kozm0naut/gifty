@@ -16,13 +16,13 @@ export interface ItemIdentity {
 
 /**
  * Placeholder shown in place of a name that the viewer has no right to see
- * (feature 003, FR-024 / SC-008: non-consented identities are masked).
+ * (feature 003, 003 FR-024 / 003 SC-008: non-consented identities are masked).
  */
 export const ANONYMOUS_DISPLAY_NAME = '????';
 
 /**
  * Resolves a batch of claimant user IDs to their display names in a single
- * query (FR-009: authorized recipients must be able to see who claimed an
+ * query (001 FR-009: authorized recipients must be able to see who claimed an
  * item). The purchaser is always the claimant (only the claimant may purchase),
  * so resolving the claimant covers both. Returns a Map of userId -> displayName.
  */
@@ -45,7 +45,7 @@ export async function resolveIdentityNames(items: IdentitySource[]): Promise<Map
 }
 
 /**
- * Feature 003 (US5, FR-021/FR-024): resolves claimant display names on a
+ * Feature 003 (US5, 003 FR-021/003 FR-024): resolves claimant display names on a
  * SPECIFIC list, honoring each claimant's name-disclosure consent on that
  * list. A claimant whose consent is `revealed` resolves to their display
  * name; every other state (`pending`, `declined`, no permission row) resolves
@@ -71,7 +71,7 @@ export async function resolveConsentedIdentityNames(
 
   // Single query: every share-permission row on this list whose recipient is
   // one of the claimants. The consent column lives on the permission row, so
-  // this is the authoritative source (FR-021: consent is per-list, per-user).
+  // this is the authoritative source (003 FR-021: consent is per-list, per-user).
   const permissions = await prisma.sharePermission.findMany({
     where: {
       giftListId: listId,
@@ -108,7 +108,7 @@ export async function resolveConsentedIdentityNames(
  * the claimant, so a single name covers both the "claimed by" and "purchased
  * by" cases.
  *
- * IMPORTANT (Constitution I/II, FR-009): this must only be applied to
+ * IMPORTANT (Constitution I/II, 001 FR-009): this must only be applied to
  * recipient-facing responses. List-owner responses keep their state/identity
  * suppression and must NOT receive these fields.
  */
@@ -139,7 +139,7 @@ export interface OwnerSafeItemSource {
 }
 
 /**
- * Owner-safe projection of a gift item (FR-009 / SC-005, Constitution I–II).
+ * Owner-safe projection of a gift item (001 FR-009 / 001 SC-005, Constitution I–II).
  *
  * The list owner must NEVER see claim/purchase state or claimant identity on
  * their own lists. This is a WHITELIST, not a blacklist: only the fields an

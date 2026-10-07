@@ -12,7 +12,7 @@ const SOURCE_A = '203.0.113.10';
 const SOURCE_B = '203.0.113.20';
 
 /**
- * The stable, user-facing failed sign-in body (FR-020). The 429 body must be
+ * The stable, user-facing failed sign-in body (003 FR-020). The 429 body must be
  * byte-identical to this, so we assert against the literal contract value
  * rather than issuing another (rate-limit-able) request from an exhausted source.
  */
@@ -36,7 +36,7 @@ beforeEach(async () => {
   await prisma.user.deleteMany();
 });
 
-describe('rate limiting contract (T010, FR-001 / FR-020 / SC-002)', () => {
+describe('rate limiting contract (T010, 003 FR-001 / 003 FR-020 / 003 SC-002)', () => {
   it('exhausts the per-source sign-in budget and returns 429 with a body identical to a failed sign-in', async () => {
     const app = await createApp();
     // Distinct accounts so only the per-source dimension (budget 10) is exercised.
@@ -63,7 +63,7 @@ describe('rate limiting contract (T010, FR-001 / FR-020 / SC-002)', () => {
 
     expect(limited.status).toBe(429);
     expect(limited.headers['retry-after']).toBeTruthy();
-    // The 429 body MUST be indistinguishable from a failed sign-in (FR-020/SC-002).
+    // The 429 body MUST be indistinguishable from a failed sign-in (003 FR-020/003 SC-002).
     expect(limited.body).toEqual(LOGIN_FAILURE_BODY);
   });
 
@@ -124,7 +124,7 @@ describe('rate limiting contract (T010, FR-001 / FR-020 / SC-002)', () => {
   });
 
   it('caps registration failures per source at the registration budget', async () => {
-    // FR-001: the per-source registration budget counts FAILURES (the 409
+    // 003 FR-001: the per-source registration budget counts FAILURES (the 409
     // "already exists" signal is the enumeration vector). Successful
     // registrations do not consume the budget.
     const app = await createApp();
@@ -146,7 +146,7 @@ describe('rate limiting contract (T010, FR-001 / FR-020 / SC-002)', () => {
     }
 
     // The 4th failure is throttled with a body indistinguishable from a
-    // failed registration (FR-020/SC-002).
+    // failed registration (003 FR-020/003 SC-002).
     const limited = await request(app)
       .post('/auth/register')
       .set('X-Forwarded-For', SOURCE_A)

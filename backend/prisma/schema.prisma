@@ -35,6 +35,20 @@ enum NameDisclosureConsent {
   declined
 }
 
+// Email integration (feature 004).
+enum OutboxKind {
+  invite
+  confirmation
+}
+
+enum OutboxStatus {
+  queued
+  sending
+  sent
+  failed
+  superseded
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -49,6 +63,15 @@ model User {
   userSessions       UserSession[]
   auditEvents        AuditEvent[]   @relation("Actor")
   ownedInvitations   PendingInvitation[]
+  outboxMessages     OutboxMessage[]
+
+  // Email verification state (feature 004, D4/D5/D6). `verifiedAt === null`
+  // is the unconfirmed state (no separate boolean). Only meaningful when email
+  // is enabled; a disabled-mode account is created `verifiedAt = now`.
+  verifiedAt              DateTime?
+  verificationTokenHash   String?   // SHA-256 of the CURRENT raw token (raw never stored here)
+  verificationExpiresAt   DateTime? // expiry of the current token (default now + 24h)
+  verificationCreatedAt   DateTime? // when the current token was issued
 }
 
 model GiftList {
@@ -64,6 +87,7 @@ model GiftList {
   items             GiftItem[]
   sharePermissions  SharePermission[]
   pendingInvitations PendingInvitation[]
+  outboxMessages    OutboxMessage[]
 }
 
 model GiftItem {
@@ -94,7 +118,7 @@ model SharePermission {
   recipientUserId String
   recipient      User                 @relation("RecipientPermission", fields: [recipientUserId], references: [id])
   permission     SharePermissionLevel
-  // Consent-gated identity disclosure (FR-020/FR-021/FR-023): the invitee's
+  // Consent-gated identity disclosure (003 FR-020/003 FR-021/003 FR-023): the invitee's
   // email may be pre-populated when the invitation targets it, and the owner
   // only sees the recipient's name after they explicitly accept disclosure.
   recipientEmail        String?
@@ -111,10 +135,10 @@ model SharePermission {
 // Security hardening (feature 003) — spec: specs/003-security-hardening/
 // ---------------------------------------------------------------------------
 
-/// Server-side session record backing the HttpOnly refresh cookie (FR-007/FR-008).
-/// Only token *hashes* are stored — never raw tokens (FR-013).
+/// Server-side session record backing the HttpOnly refresh cookie (003 FR-007/003 FR-008).
+/// Only token *hashes* are stored — never raw tokens (003 FR-013).
 /// `previousRefreshHash` supports one-step-back refresh-token rotation and
-/// theft detection (FR-026).
+/// theft detection (003 FR-026).
 model UserSession {
   id                  String    @id @default(uuid())
   userId              String
@@ -134,8 +158,8 @@ model UserSession {
   @@index([expiresAt])
 }
 
-/// Append-only audit trail (FR-011/FR-012). Insert-only: the API exposes no
-/// update or delete path and the app never prunes (FR-014).
+/// Append-only audit trail (003 FR-011/003 FR-012). Insert-only: the API exposes no
+/// update or delete path and the app never prunes (003 FR-014).
 model AuditEvent {
   id           String   @id @default(uuid())
   actorUserId  String?
@@ -154,11 +178,11 @@ model AuditEvent {
   @@index([targetType, targetId])
 }
 
-/// Pending email invitation for a gift list (FR-021). `giftListId` is the
+/// Pending email invitation for a gift list (003 FR-021). `giftListId` is the
 /// single source of truth for the target — never the free-text `detail`
-/// (FR-012). `status` starts `pending`; it becomes `matched` when the
+/// (003 FR-012). `status` starts `pending`; it becomes `matched` when the
 /// invitee signs in and the invitation is consumed, or `discarded` when it
-/// expires or is explicitly removed (FR-025).
+/// expires or is explicitly removed (003 FR-025).
 model PendingInvitation {
   id           String           @id @default(uuid())
   giftListId   String
@@ -173,4 +197,52 @@ model PendingInvitation {
 
   @@unique([giftListId, inviteeEmail])
   @@index([inviteeEmail, status])
+}
+
+// ---------------------------------------------------------------------------
+// Email integration (feature 004) — spec: specs/004-email-integration/
+// ---------------------------------------------------------------------------
+
+/// Durable, transactional email queue (D2). A row is committed in the SAME
+/// Prisma transaction as the business write that produced it (the share, the
+/// registration), then drained by a separate in-process loop (D2). The single
+/// source of truth for "what should be sent, to whom, and what happened to it"
+/// (004 FR-006, 004 FR-007). Sensitive: a confirmation row's body embeds the raw
+/// verification token — never returned by any API, read only by the drainer
+/// and operators.
+model OutboxMessage {
+  id             String       @id @default(uuid())
+  kind           OutboxKind
+  // Normalized (trimmed, lowercased) delivery address AND the invite-dedup key.
+  recipientEmail String
+  // Set for `invite`, null for `confirmation` — the dedup discriminator.
+  listId         String?
+  // The account being confirmed (set for `confirmation`, null for `invite`).
+  userId         String?
+  subject        String
+  bodyText       String
+  bodyHtml       String?
+  status         OutboxStatus @default(queued)
+  attempts       Int          @default(0)
+  maxAttempts    Int          @default(5)
+  nextAttemptAt  DateTime     @default(now())
+  lastAttemptAt  DateTime?
+  // Scrubbed error class/message (e.g. `provider_http_5xx`), never a provider key.
+  lastError      String?
+  sentAt         DateTime?
+  supersededAt   DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  list GiftList? @relation(fields: [listId], references: [id], onDelete: Cascade)
+  user User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Invite-dedup guarantee (004 FR-005, 004 SC-001), enforced by the database.
+  // Postgres treats NULL as distinct in a unique index, so:
+  //   invite rows (listId non-null)   → at most one per (list, recipientEmail);
+  //   confirmation rows (listId NULL) → unlimited per recipientEmail (004 FR-014).
+  @@unique([listId, recipientEmail])
+  @@index([status, nextAttemptAt])
+  @@index([userId])
+  @@index([listId])
 }

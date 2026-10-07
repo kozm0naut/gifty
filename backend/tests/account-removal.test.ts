@@ -4,7 +4,7 @@ import { prisma } from '../src/prisma.js';
 import { createApp } from '../src/app.js';
 
 /**
- * T045 [US7] — Account removal cascade (FR-014, FR-028; US7 scenarios 2–4;
+ * T045 [US7] — Account removal cascade (003 FR-014, 003 FR-028; US7 scenarios 2–4;
  * edge cases "Removal while a recipient on others' lists",
  * "Owner removed while items are claimed (consent interaction)").
  *
@@ -92,7 +92,7 @@ beforeEach(async () => {
   await prisma.user.deleteMany();
 });
 
-describe('account removal cascade (T045, FR-014, FR-028)', () => {
+describe('account removal cascade (T045, 003 FR-014, 003 FR-028)', () => {
   it('requires authentication (401 without a session)', async () => {
     const app = await createApp();
     const res = await request(app).delete('/account');
@@ -215,7 +215,7 @@ describe('account removal cascade (T045, FR-014, FR-028)', () => {
     ).toHaveLength(0);
   });
 
-  it('audit history SURVIVES removal with actorUserId nulled (data-model.md; FR-013)', async () => {
+  it('audit history SURVIVES removal with actorUserId nulled (data-model.md; 003 FR-013)', async () => {
     const app = await createApp();
     const user = await register(app, 'aud', 'Audited');
     const listId = await createList(app, user, 'Audit List');

@@ -21,7 +21,7 @@ beforeEach(async () => {
   await prisma.user.deleteMany();
 });
 
-describe('US1 hardened sign-in flow (T012, FR-020)', () => {
+describe('US1 hardened sign-in flow (T012, 003 FR-020)', () => {
   it('returns a uniform 401 for an unknown email and a wrong password', async () => {
     const app = await createApp();
     const known = uniqueEmail('uniform');
@@ -41,7 +41,7 @@ describe('US1 hardened sign-in flow (T012, FR-020)', () => {
     expect(unknown.body).toEqual(wrong.body);
   });
 
-  it('keeps unknown-email and wrong-password responses in the same timing class (FR-020)', async () => {
+  it('keeps unknown-email and wrong-password responses in the same timing class (003 FR-020)', async () => {
     const app = await createApp();
     const known = uniqueEmail('timing');
     await request(app)
@@ -101,7 +101,7 @@ describe('US1 hardened sign-in flow (T012, FR-020)', () => {
     });
     expect(session).toBeTruthy();
 
-    // US4 (T012/T017/SC-007): the legacy `token` bridge field is formally
+    // US4 (T012/T017/003 SC-007): the legacy `token` bridge field is formally
     // retired — the credential is now exclusively the HttpOnly cookie pair.
     expect(res.body.token).toBeUndefined();
   });

@@ -50,7 +50,7 @@ async function shareWith(app: any, owner: User, listId: string, recipient: User)
   return res;
 }
 
-describe('consent endpoints (T030, FR-021/FR-023)', () => {
+describe('consent endpoints (T030, 003 FR-021/003 FR-023)', () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret-32-characters-long-0000';
     await prisma.pendingInvitation.deleteMany();
@@ -114,7 +114,7 @@ describe('consent endpoints (T030, FR-021/FR-023)', () => {
     expect(reveal.status).toBe(200);
     expect(reveal.body).toEqual({ consent: 'revealed' });
 
-    // Re-set back to declined (revocable in either direction — FR-023).
+    // Re-set back to declined (revocable in either direction — 003 FR-023).
     const decline = await request(app)
       .post(`/lists/${listId}/consent`)
       .set('Cookie', `gifty_access=${recipient.access}`)
@@ -177,7 +177,7 @@ describe('consent endpoints (T030, FR-021/FR-023)', () => {
     expect(missingListRes.status).toBe(404);
   });
 
-  it('setting consent does not affect the recipient ability to view or claim (FR-023)', async () => {
+  it('setting consent does not affect the recipient ability to view or claim (003 FR-023)', async () => {
     const app = await createApp();
     const owner = await register(app, 'consent-view-owner', 'Owner');
     const recipient = await register(app, 'consent-view-recipient', 'View Recip');

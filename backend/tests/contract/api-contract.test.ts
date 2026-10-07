@@ -180,7 +180,7 @@ describe('API contract: sharing', () => {
     const res = await request(app).get(`/lists/${listRes.body.list.id}/share-permissions`).set('Cookie', `gifty_access=${owner.access}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.permissions)).toBe(true);
-    // Uniform owner share view (T058/T060, FR-010/FR-021): a single
+    // Uniform owner share view (T058/T060, 003 FR-010/003 FR-021): a single
     // `permissions` array (pending invitations included — no separate
     // `pendingInvitations` array), the invite email as the owner's source of
     // truth, and the recipient display name only after consent to reveal.

@@ -72,7 +72,7 @@ describe('User Story 2 - Item Management', () => {
         unitPrice: -5,
       });
 
-    // Valid: quantity is optional (FR-003) — omitting it must succeed
+    // Valid: quantity is optional (001 FR-003) — omitting it must succeed
     const noQuantityResponse = await request(app)
       .post(`/lists/${listResponse.body.list.id}/items`)
       .set('Cookie', `gifty_access=${ownerCookie}`)

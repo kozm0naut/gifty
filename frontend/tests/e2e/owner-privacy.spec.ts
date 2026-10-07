@@ -85,7 +85,7 @@ test.describe('T037: Owner privacy visibility', () => {
     await expect(espressoCard.locator('.badge')).toContainText('purchased');
     await expect(espressoCard.locator('.badge')).toContainText('BY YOU');
 
-    // Recipient sees the resolved purchaser identity (FR-009 / T047).
+    // Recipient sees the resolved purchaser identity (001 FR-009 / T047).
     // The recipient is the purchaser, so the UI resolves the identity as "BY YOU".
     await expect(espressoCard.locator('.badge')).toContainText('BY YOU');
 

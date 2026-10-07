@@ -13,7 +13,7 @@ import {
 } from './helpers';
 
 /**
- * T046 [US7] — Account removal (FR-014, FR-028).
+ * T046 [US7] — Account removal (003 FR-014, 003 FR-028).
  *
  * UI flow: the user confirms an IRREVERSIBLE removal from the account area
  * (explicit confirmation naming the finality: owned lists permanently deleted,
@@ -52,8 +52,8 @@ test.describe('Account removal (US7)', () => {
     await expect(page).toHaveURL(/\/me$/);
 
     // Danger action with an explicit, finality-naming confirmation.
-    await page.getByRole('button', { name: /remove account/i }).click();
-    const confirm = page.getByRole('button', { name: /permanently remove account/i });
+    await page.getByRole('button', { name: /delete account/i }).click();
+    const confirm = page.getByRole('button', { name: /permanently delete account/i });
     await expect(confirm).toBeVisible();
     await expect(confirm).toContainText(/permanently/i);
     await confirm.click();

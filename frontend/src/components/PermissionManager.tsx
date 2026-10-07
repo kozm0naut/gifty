@@ -119,7 +119,7 @@ export function PermissionManager({ listId, onPermissionsUpdated, compact }: Per
               }
               return 0;
             }).map((p) => {
-              // Uniform share view (Phase 12, FR-010/FR-021): every entry
+              // Uniform share view (Phase 12, 003 FR-010/003 FR-021): every entry
               // renders the same way — the invite email (the owner's source of
               // truth) plus the display name ONLY when the recipient consented
               // to reveal (recipientDisplayName is non-null). Nothing here

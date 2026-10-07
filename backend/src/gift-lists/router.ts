@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../prisma.js';
 import { makeId } from '../common/id.js';
-import { requireAuth, type AuthenticatedRequest } from '../auth/middleware.js';
+import { requireAuth, requireConfirmed, type AuthenticatedRequest } from '../auth/middleware.js';
 import { authorizeList } from '../auth/middleware.js';
 import {
   ANONYMOUS_DISPLAY_NAME,
@@ -11,10 +11,43 @@ import {
 } from '../common/identity.js';
 import { recordAuditEvent } from '../audit/events.js';
 import { clientIp } from '../auth/rate-limit.js';
+import { loadConfig } from '../config/index.js';
+import { buildInviteLink } from '../email/links.js';
+import { enqueueInvite } from '../email/outbox.js';
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 /**
- * Attach the owner identity for a list, honoring feature 003 (US5, FR-025 /
- * SC-008): the owner's email is NEVER sent to recipients. The viewer-aware
+ * 004 FR-001 / contracts/api.md: build the US1 invite email content. Subject and
+ * bodies are fixed; the only dynamic data is the owner's display name and the
+ * public origin. The link is the home page — no token, no deep link, no raw
+ * list id (004 FR-013).
+ */
+function buildInviteContent(ownerDisplayName: string | null | undefined) {
+  const link = buildInviteLink();
+  const subject = "You've been shared a gift list";
+  const name = ownerDisplayName || 'Someone';
+  const bodyText =
+    `${name} shared their Gifty gift list with you.\n` +
+    `Open Gifty: ${link}\n` +
+    `Sign in (or create an account) to view the shared list.`;
+  const bodyHtml =
+    `<p>${escapeHtml(name)} shared their Gifty gift list with you.</p>` +
+    `<p><a href="${escapeHtml(link)}">Open Gifty</a></p>` +
+    `<p>Sign in (or create an account) to view the shared list.</p>`;
+  return { subject, bodyText, bodyHtml };
+}
+
+/**
+ * Attach the owner identity for a list, honoring feature 003 (US5, 003 FR-025 /
+ * 003 SC-008): the owner's email is NEVER sent to recipients. The viewer-aware
  * `viewerId` decides which owner fields are exposed:
  *  - owner (viewerId === ownerUserId): id, displayName, email;
  *  - any recipient: id, displayName only (no email).
@@ -41,6 +74,8 @@ export function createListRouter() {
   const router = Router();
 
   router.use(requireAuth);
+  // Feature 004 (US2, 004 FR-012): every list route requires a confirmed email.
+  router.use(requireConfirmed);
 
   router.get('/', async (req: AuthenticatedRequest, res) => {
     const [ownedLists, sharedPermissions] = await Promise.all([
@@ -56,7 +91,7 @@ export function createListRouter() {
 
     const sharedLists = sharedPermissions.map((permission) => permission.list);
 
-    // Owner-privacy boundary (FR-009 / SC-005): the list owner must never see
+    // Owner-privacy boundary (001 FR-009 / 001 SC-005): the list owner must never see
     // claim/purchase state or claimant identity for items on a list
     // they own.
     const suppressedOwnedLists = ownedLists.map((list) => ({
@@ -66,7 +101,7 @@ export function createListRouter() {
 
     // Shared lists (the requester is a recipient): keep full state AND resolve
     // the claimant display name per list, honoring name-disclosure consent
-    // (FR-021/FR-024): a claimant's name appears only when they consented
+    // (003 FR-021/003 FR-024): a claimant's name appears only when they consented
     // `revealed` on THAT list, otherwise the `????` placeholder.
     const decoratedSharedLists = await Promise.all(
       sharedLists.map(async (list) => ({
@@ -138,11 +173,11 @@ export function createListRouter() {
     const isOwner = updated.ownerUserId === req.user!.id;
     let visibleItems;
     if (isOwner) {
-      // Owner-privacy boundary (FR-009 / SC-005): no state or identity.
+      // Owner-privacy boundary (001 FR-009 / 001 SC-005): no state or identity.
       visibleItems = updated.items.map(projectOwnerVisibleItem);
     } else {
-      // Recipient view (FR-009): full state + consent-aware claimant name
-      // (FR-021/FR-024).
+      // Recipient view (001 FR-009): full state + consent-aware claimant name
+      // (003 FR-021/003 FR-024).
       visibleItems = decorateItemIdentity(
         updated.items,
         await resolveConsentedIdentityNames(updated.items, updated.id),
@@ -162,7 +197,7 @@ export function createListRouter() {
       return res.status(404).json({ message: 'List not found' });
     }
 
-    // Feature 003 (US5, FR-010/FR-011, SC-009): the response to a registered
+    // Feature 003 (US5, 003 FR-010/003 FR-011, 003 SC-009): the response to a registered
     // recipient and to an unregistered email must be INDISTINGUISHABLE —
     // same status, same body shape. Only the underlying record differs:
     // registered users get a SharePermission row (the email is stored as the
@@ -198,7 +233,7 @@ export function createListRouter() {
     }
 
     // For a resolved user, the invite email is the source of truth for the
-    // owner's sharing view (FR-011/FR-025). If the caller shared by userId
+    // owner's sharing view (003 FR-011/003 FR-025). If the caller shared by userId
     // rather than email, populate it from the account so the owner always sees
     // the recipient's email.
     if (targetUserId && !normalizedEmail) {
@@ -236,7 +271,7 @@ export function createListRouter() {
     }
 
     /**
-     * FR-010 / SC-009 (US6 scenario 1): the response to an EMAIL share must
+     * 003 FR-010 / 003 SC-009 (US6 scenario 1): the response to an EMAIL share must
      * be indistinguishable from a share to a registered recipient, so it can
      * never reveal whether the email is an account. Both branches therefore
      * return the SAME uniform body — a neutral id (never the underlying
@@ -257,6 +292,25 @@ export function createListRouter() {
       },
     });
 
+    // Email mode is resolved once per request (004 FR-015): in `disabled` mode the
+    // share still succeeds but no invite is enqueued — the share response body
+    // and status are identical regardless of email mode.
+    const emailEnabled = loadConfig().email.mode !== 'disabled';
+
+    // Owner's display name personalizes the invite (004 FR-001). Fetched once; on
+    // failure we fall back to the neutral 'Someone' phrasing so the share
+    // never fails because of a display-name lookup (004 FR-006).
+    let ownerDisplayName: string | null = null;
+    try {
+      const ownerRow = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { displayName: true },
+      });
+      ownerDisplayName = ownerRow?.displayName ?? null;
+    } catch {
+      ownerDisplayName = null;
+    }
+
     if (targetUserId) {
       // Registered recipient: materialize a SharePermission row (the
       // recipient gets access immediately). A re-invite after revocation is a
@@ -270,6 +324,12 @@ export function createListRouter() {
         },
       });
 
+      // T014 (004 FR-006/004 SC-007): the share write commits on its own; the invite
+      // enqueue is a SEPARATE best-effort write on the base client. It is
+      // deliberately NOT in the same transaction: (a) the share must never
+      // fail or roll back because of email (004 FR-006), and (b) `enqueueInvite`'
+      // P2002 dedup recovery re-queries, which Postgres forbids inside an
+      // aborted transaction (25P02) — so it runs in autocommit.
       let sharePermission;
       if (existing) {
         sharePermission = await prisma.sharePermission.update({
@@ -287,6 +347,38 @@ export function createListRouter() {
             nameDisclosureConsent: 'pending',
             recipientEmail: normalizedEmail ?? undefined,
           },
+        });
+      }
+
+      let invite: { outboxMessageId: string; inserted: boolean } | null = null;
+      if (emailEnabled) {
+        const { subject, bodyText, bodyHtml } = buildInviteContent(ownerDisplayName);
+        try {
+          invite = await enqueueInvite(prisma, {
+            listId,
+            recipientEmail: normalizedEmail as string,
+            subject,
+            bodyText,
+            bodyHtml,
+          });
+        } catch (err) {
+          // 004 FR-006: the share itself must not fail because of email.
+          console.error(
+            `[gift-lists/share] invite enqueue failed (list=${listId}, recipient=${normalizedEmail}):`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+
+      if (invite) {
+        recordAuditEvent({
+          actorUserId: req.user!.id,
+          action: 'email_invite_queued',
+          targetType: 'emailOutbox',
+          targetId: invite.outboxMessageId,
+          outcome: 'success',
+          ip: clientIp(req),
+          detail: { listId, recipientEmail: normalizedEmail },
         });
       }
 
@@ -313,7 +405,10 @@ export function createListRouter() {
     // Unregistered email: hold as a PendingInvitation (normalized email).
     // Always a 201 with the SAME uniform body as the registered-email path —
     // no 404, no different status or shape — so a probe cannot tell which
-    // emails are accounts (SC-009).
+    // emails are accounts (003 SC-009).
+    // T014 (004 FR-006/004 SC-007): the PendingInvitation write commits on its own;
+    // the invite enqueue is a SEPARATE best-effort write on the base client
+    // (see the registered branch for why it is not transactional).
     const invitation = await prisma.pendingInvitation.upsert({
       where: {
         giftListId_inviteeEmail: {
@@ -330,6 +425,37 @@ export function createListRouter() {
         status: 'pending',
       },
     });
+
+    let invite: { outboxMessageId: string; inserted: boolean } | null = null;
+    if (emailEnabled) {
+      const { subject, bodyText, bodyHtml } = buildInviteContent(ownerDisplayName);
+      try {
+        invite = await enqueueInvite(prisma, {
+          listId,
+          recipientEmail: normalizedEmail as string,
+          subject,
+          bodyText,
+          bodyHtml,
+        });
+      } catch (err) {
+        console.error(
+          `[gift-lists/share] invite enqueue failed (list=${listId}, recipient=${normalizedEmail}):`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
+    if (invite) {
+      recordAuditEvent({
+        actorUserId: req.user!.id,
+        action: 'email_invite_queued',
+        targetType: 'emailOutbox',
+        targetId: invite.outboxMessageId,
+        outcome: 'success',
+        ip: clientIp(req),
+        detail: { listId, recipientEmail: normalizedEmail },
+      });
+    }
 
     recordAuditEvent({
       actorUserId: req.user!.id,
@@ -414,7 +540,7 @@ export function createListRouter() {
       return res.status(404).json({ message: 'List not found' });
     }
 
-    // Owner-only sharing view (FR-010/FR-021/FR-025, Phase 12 uniform view):
+    // Owner-only sharing view (003 FR-010/003 FR-021/003 FR-025, Phase 12 uniform view):
     // ONE uniform `permissions` array covering both registered recipients
     // (SharePermission) and unregistered invitees (PendingInvitation). The
     // owner sees the invite email (source of truth) for every entry, and a
@@ -472,7 +598,7 @@ export function createListRouter() {
     res.status(200).json({ permissions: uniform });
   });
 
-  // Feature 003 (US5, FR-021/FR-022/FR-023): name-disclosure consent.
+  // Feature 003 (US5, 003 FR-021/003 FR-022/003 FR-023): name-disclosure consent.
   // The consent choice belongs to the RECIPIENT — even the list owner gets a
   // 403 here (it is not owner-queryable data). Consent is identity-only: it
   // never grants or revokes view/claim access.
@@ -551,7 +677,7 @@ export function createListRouter() {
       return res.status(404).json({ message: 'List not found' });
     }
 
-    // Registration-enumeration guard (FR-010/FR-021, Phase 12): return BOTH
+    // Registration-enumeration guard (003 FR-010/003 FR-021, Phase 12): return BOTH
     // registered recipients (SharePermission) AND unregistered pending
     // invitees (PendingInvitation) so the row count is identical to the
     // owner's uniform share view. A co-recipient can therefore no longer
@@ -577,7 +703,7 @@ export function createListRouter() {
 
     const isOwner = list.ownerUserId === req.user!.id;
 
-    // Feature 003 (US5, FR-024 / SC-008): a co-recipient only sees another
+    // Feature 003 (US5, 003 FR-024 / 003 SC-008): a co-recipient only sees another
     // recipient's display name when THAT recipient has consented `revealed`
     // on this list. The recipient always sees their own name (it is their
     // own identity), and the owner always sees names (the owner's sharing
@@ -632,11 +758,11 @@ export function createListRouter() {
 
     let visibleItems;
     if (isOwner) {
-      // Owner-privacy boundary (FR-009 / SC-005): no state or identity.
+      // Owner-privacy boundary (001 FR-009 / 001 SC-005): no state or identity.
       visibleItems = list.items.map(projectOwnerVisibleItem);
     } else {
-      // Recipient view (FR-009): full state + consent-aware claimant name
-      // (FR-021/FR-024).
+      // Recipient view (001 FR-009): full state + consent-aware claimant name
+      // (003 FR-021/003 FR-024).
       visibleItems = decorateItemIdentity(
         list.items,
         await resolveConsentedIdentityNames(list.items, list.id),

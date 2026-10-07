@@ -3,6 +3,7 @@ import {
   SESSION_EXPIRED_EVENT,
   fetchAccount,
   logoutSession,
+  resendConfirmation,
 } from '../services/api';
 import type { SessionExpiredDetail } from '../services/api';
 
@@ -10,15 +11,18 @@ export type User = {
   id: string;
   email: string;
   displayName: string;
+  /** Feature 004 (US2): email confirmed. Undefined → treated as confirmed
+   *  (backward compatible with a response that predates the field). */
+  verified?: boolean;
 };
 
-/** FR-027 notice surfaced on the sign-in page after a session termination. */
+/** 003 FR-027 notice surfaced on the sign-in page after a session termination. */
 export interface SessionNotice {
   message: string;
-  /** True when the termination was a refresh-token-reuse (theft) signal (FR-026). */
+  /** True when the termination was a refresh-token-reuse (theft) signal (003 FR-026). */
   security: boolean;
   /**
-   * Presentation hint for the sign-in page. 'security' (red, FR-027 theft
+   * Presentation hint for the sign-in page. 'security' (red, 003 FR-027 theft
    * signal), 'warning' (yellow, expired session), 'info' (green, positive
    * confirmations: signed out / account removed).
    */
@@ -36,6 +40,14 @@ interface AuthContextType {
   /** US7: the account was removed server-side — drop local auth state. */
   removeAccount: () => void;
   clearSessionNotice: () => void;
+  /** Feature 004 (US2): true when the account's email is confirmed (or the
+   *  field is absent). Drives the confirmation gate on the client side. */
+  isVerified: boolean;
+  /** Feature 004 (US2): request a fresh confirmation email. Re-fetches the
+   *  account afterward so `verified` reflects the latest server state. */
+  resendConfirmation: () => Promise<void>;
+  /** Re-read `GET /account` to pick up a newly-confirmed `verified` flag. */
+  refreshAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,6 +62,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionNotice, setSessionNotice] = useState<SessionNotice | null>(null);
 
   const isAuthenticated = user !== null;
+  // Feature 004 (US2): the gate is off when the flag is absent (older
+  // response) — only an explicit `verified: false` means unconfirmed.
+  const isVerified = user == null || user.verified !== false;
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionNotice(null);
   }, []);
 
-  // Sign out (FR-008): the server revokes the session family and clears
+  // Sign out (003 FR-008): the server revokes the session family and clears
   // both HttpOnly cookies; we clear local state regardless so the UI lands
   // on the sign-in page even if the request fails.
   const logout = useCallback(async () => {
@@ -104,9 +119,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearSessionNotice = useCallback(() => setSessionNotice(null), []);
 
+  // Re-read `GET /account` so a newly-confirmed `verified` flag is adopted
+  // without a full page reload. A 401 (session gone) clears local state.
+  const refreshAccount = useCallback(async () => {
+    try {
+      const fresh = await fetchAccount();
+      setUser(fresh);
+    } catch {
+      setUser(null);
+    }
+  }, []);
+
+  // Re-request the confirmation email (US2). Always re-reads the account so
+  // the UI reflects the latest `verified` state (a 403 "already confirmed"
+  // should lift the gate), then rethrows any server message (403/429/401) so
+  // the caller can surface it.
+  const resend = useCallback(async () => {
+    let error: Error | undefined;
+    try {
+      await resendConfirmation();
+    } catch (err) {
+      error = err as Error;
+    }
+    await refreshAccount();
+    if (error) throw error;
+  }, [refreshAccount]);
+
   // If the API reports the session is no longer valid (401 that survived a
   // refresh), drop the local auth state so ProtectedRoute redirects to the
-  // sign-in page, and surface the FR-027 notice (strong wording when the
+  // sign-in page, and surface the 003 FR-027 notice (strong wording when the
   // termination was a refresh-token-reuse / theft signal).
   useEffect(() => {
     const handleSessionExpired = (event: Event) => {
@@ -135,6 +176,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         removeAccount,
         clearSessionNotice,
+        isVerified,
+        resendConfirmation: resend,
+        refreshAccount,
       }}
     >
       {children}

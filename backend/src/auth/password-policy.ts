@@ -1,7 +1,7 @@
 /**
  * Password-strength policy for feature 003 (security hardening) — T014.
  *
- * Pure function over a candidate password (FR-002). The default policy is:
+ * Pure function over a candidate password (003 FR-002). The default policy is:
  *   - length >= 8, AND
  *   - at least one uppercase letter, one lowercase letter, one number, and
  *     one symbol (any non-alphanumeric character).
@@ -27,7 +27,7 @@ const HAS_NUMBER = /[0-9]/;
 const HAS_SYMBOL = /[^A-Za-z0-9]/;
 
 /**
- * Validate a candidate password against the feature 003 policy (FR-002).
+ * Validate a candidate password against the feature 003 policy (003 FR-002).
  * Pure and side-effect free — safe to call in a request path or a unit test.
  */
 export function validatePasswordPolicy(password: string): PasswordPolicyResult {

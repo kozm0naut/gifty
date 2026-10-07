@@ -1,7 +1,7 @@
 /**
  * In-process rate limiter for feature 003 (security hardening) — T013.
  *
- * Enforces the two independent budgets from FR-001 / research D1 at the two
+ * Enforces the two independent budgets from 003 FR-001 / research D1 at the two
  * auth entry points (`/auth/login`, `/auth/register`):
  *   - **per-source**  — keyed on the trusted-proxy client IP; defeats mass
  *     enumeration and throwaway-account creation;
@@ -11,7 +11,7 @@
  * Budgets are fixed **failure** windows (the spec says "N failures / window"):
  *   - ≤ 10 failed sign-ins   / 15 min per source
  *   - ≤ 3  failed registrations / 15 min per source (strictly tighter — the
- *     409 "already exists" response is the enumeration vector, FR-020)
+ *     409 "already exists" response is the enumeration vector, 003 FR-020)
  *   - ≤ 5  failed sign-ins   / 15 min per account (sign-in only)
  *
  * Counters live in a per-process `Map` and reset on restart (the documented
@@ -21,14 +21,21 @@
  * out merely for signing in.
  *
  * The 429 body is produced by the caller and MUST be indistinguishable from a
- * failed auth attempt (FR-020 / SC-002); this module only decides *whether*
+ * failed auth attempt (003 FR-020 / 003 SC-002); this module only decides *whether*
  * to throttle and contributes a non-leaking `Retry-After` value.
  */
 
 import type { Request } from 'express';
 import { loadConfig } from '../config/index.js';
 
-export type BudgetKind = 'login-source' | 'register-source' | 'login-account';
+export type BudgetKind =
+  | 'login-source'
+  | 'register-source'
+  | 'login-account'
+  // Feature 004 (US2, 004 FR-014): verification-email resends, keyed per-account
+  // (userId) and counted on EVERY successful send (not just failures) so a
+  // legitimate user is still capped at a few per window.
+  | 'resend-confirmation';
 
 interface WindowCounter {
   /** Failures recorded in the current window. */
@@ -49,6 +56,9 @@ function budgetFor(kind: BudgetKind): number {
       return rateLimit.registerPerSource;
     case 'login-account':
       return rateLimit.loginPerAccount;
+    // Feature 004 (US2): the per-account resend cap lives on the email config.
+    case 'resend-confirmation':
+      return loadConfig().email.resendMaxPerAccount;
   }
 }
 
@@ -110,14 +120,14 @@ export function recordFailure(
 /**
  * A safe, non-leaking `Retry-After` value (seconds). It reflects the full
  * window rather than the specific key's remaining time so its presence and
- * magnitude never hint at *which* source/account is hot (SC-002).
+ * magnitude never hint at *which* source/account is hot (003 SC-002).
  */
 export function retryAfterSeconds(): number {
   return Math.ceil(windowMs() / 1000);
 }
 
 /**
- * The client IP used as the per-source rate-limit key (FR-001, research D1).
+ * The client IP used as the per-source rate-limit key (003 FR-001, research D1).
  *
  * Delegates to `req.ip`, which honors the app's Express trust-proxy setting
  * (see `createApp`): with trust proxy OFF (default, no fronting proxy) it is

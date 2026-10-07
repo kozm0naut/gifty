@@ -53,8 +53,8 @@ beforeEach(async () => {
   await prisma.user.deleteMany();
 });
 
-describe('pending invitations (T032, FR-010/FR-011, SC-009)', () => {
-  it('sharing to an unregistered email returns the same success shape as a registered share, with no 404 (FR-010, SC-009)', async () => {
+describe('pending invitations (T032, 003 FR-010/003 FR-011, 003 SC-009)', () => {
+  it('sharing to an unregistered email returns the same success shape as a registered share, with no 404 (003 FR-010, 003 SC-009)', async () => {
     const app = await createApp();
     const owner = await register(app, 'p1-owner', 'Owner');
     const registered = await register(app, 'p1-reg', 'Registered Recip');
@@ -85,7 +85,7 @@ describe('pending invitations (T032, FR-010/FR-011, SC-009)', () => {
     expect(pendingShare.body.sharePermission.recipientEmail).toBe(unknownEmail);
   });
 
-  it('records a pending invitation with a normalized email (FR-010)', async () => {
+  it('records a pending invitation with a normalized email (003 FR-010)', async () => {
     const app = await createApp();
     const owner = await register(app, 'p2-owner', 'Owner');
     const listId = await createList(app, owner, 'Pending List 2');
@@ -105,7 +105,7 @@ describe('pending invitations (T032, FR-010/FR-011, SC-009)', () => {
     expect(invitation?.ownerUserId).toBe(owner.id);
   });
 
-  it('a pending invitation grants no access before the account exists (FR-010)', async () => {
+  it('a pending invitation grants no access before the account exists (003 FR-010)', async () => {
     const app = await createApp();
     const owner = await register(app, 'p3-owner', 'Owner');
     const listId = await createList(app, owner, 'Pending List 3');
@@ -131,7 +131,7 @@ describe('pending invitations (T032, FR-010/FR-011, SC-009)', () => {
     expect(recipients.some((r: any) => r.recipientEmail === unknownEmail || r.email === unknownEmail)).toBe(false);
   });
 
-  it('registration of the invitee email converts the pending invitation into a share permission transactionally (FR-011, SC-009)', async () => {
+  it('registration of the invitee email converts the pending invitation into a share permission transactionally (003 FR-011, 003 SC-009)', async () => {
     const app = await createApp();
     const owner = await register(app, 'p4-owner', 'Owner');
     const listId = await createList(app, owner, 'Pending List 4');

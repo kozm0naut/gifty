@@ -112,7 +112,7 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
     };
   }, [listId, list, user?.id]);
 
-  // US5 (FR-021/FR-022): load the caller's consent state for this list once
+  // US5 (003 FR-021/003 FR-022): load the caller's consent state for this list once
   // the list and viewer are known. Recipients get a `pending`/`revealed`/
   // `declined` state; the owner (or a non-recipient) gets a 403 → `null`,
   // which hides all consent UI.
@@ -186,7 +186,7 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
 
   const isOwner = list.owner?.id === user?.id;
 
-  // US5 (FR-023): mirror the co-recipient view for the viewer's OWN entry in
+  // US5 (003 FR-023): mirror the co-recipient view for the viewer's OWN entry in
   // the sharing stack. When the viewer has not consented to name disclosure on
   // this list, their own avatar/name render as the anonymous placeholder — the
   // same thing every other non-revealing recipient sees. Purely cosmetic (the
@@ -195,10 +195,10 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
   // and already-revealed recipients are unaffected.
   // Anonymous placeholder (grey circle with "?") — one visual for: the
   // viewer's OWN entry while their consent is not `revealed` (self-mask,
-  // FR-023), and every other entry whose recipient has not consented to
-  // reveal (unregistered invitees included — indistinguishable, FR-010/FR-021).
+  // 003 FR-023), and every other entry whose recipient has not consented to
+  // reveal (unregistered invitees included — indistinguishable, 003 FR-010/003 FR-021).
   const MASK_GREY = '#6b7280';
-  // Self-mask (FR-023): in the recipient view the API ALWAYS returns the
+  // Self-mask (003 FR-023): in the recipient view the API ALWAYS returns the
   // viewer's own name (it is their own identity), so their own entry must be
   // masked client-side to mirror what a co-recipient would see. `null` = not a
   // recipient (owner / consent read failed) → consent UI hidden, no self-mask.
@@ -387,7 +387,7 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
         )}
         </div>
 
-        {/* US5 (FR-023): self-serve name-disclosure control — recipients only. */}
+        {/* US5 (003 FR-023): self-serve name-disclosure control — recipients only. */}
         {listId && consent !== null && (
           <ConsentControl listId={listId} consent={consent} onChange={handleConsentChange} />
         )}
@@ -401,7 +401,7 @@ export function ListPage({ initialModal }: { initialModal?: ListModal }) {
         />
       </section>
 
-      {/* US5 (FR-022): one-time name-disclosure consent prompt — recipients only. */}
+      {/* US5 (003 FR-022): one-time name-disclosure consent prompt — recipients only. */}
       {listId && consent === 'pending' && (
         <ConsentPrompt listId={listId} consent={consent} onChange={handleConsentChange} />
       )}

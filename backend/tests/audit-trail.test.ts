@@ -4,12 +4,12 @@ import { prisma } from '../src/prisma.js';
 import { createApp } from '../src/app.js';
 
 /**
- * T044 [US7] — Audit coverage (FR-013, SC-001, edge case "Audit under failure").
+ * T044 [US7] — Audit coverage (003 FR-013, 003 SC-001, edge case "Audit under failure").
  *
  * Every security-relevant action — success AND failure/denied — must produce an
  * `AuditEvent` row in the data store with an attributable identity (nullable
  * for anonymous failures), a target, an outcome, a timestamp, and a source IP.
- * No credential/token/password/payload data may be stored (FR-013).
+ * No credential/token/password/payload data may be stored (003 FR-013).
  *
  * The audit capture is fire-and-forget (T005), so after each action we poll the
  * table for the expected row rather than asserting on an awaited write.
@@ -96,7 +96,7 @@ beforeEach(async () => {
   await prisma.user.deleteMany();
 });
 
-describe('audit trail — attributable records for security-relevant actions (T044, FR-013, SC-001)', () => {
+describe('audit trail — attributable records for security-relevant actions (T044, 003 FR-013, 003 SC-001)', () => {
   it('records auth success and failure with outcome, timestamp, ip, and (null) actor for anonymous failure', async () => {
     const app = await createApp();
     const ghost = uniqueEmail('ghost');
@@ -260,7 +260,7 @@ describe('audit trail — attributable records for security-relevant actions (T0
     expect(row.targetId).toBe(owner.id);
     expect(row.actorUserId).toBeNull();
 
-    // FR-013: no password / credential anywhere in the audit store.
+    // 003 FR-013: no password / credential anywhere in the audit store.
     const all = await prisma.auditEvent.findMany();
     for (const r of all) {
       expect(JSON.stringify(r.detail ?? null)).not.toContain('Password123!');

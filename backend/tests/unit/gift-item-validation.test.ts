@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { validateCreateGiftItem } from '../../src/gift-items/gift-item.validation.js';
 
 describe('validateCreateGiftItem (unit)', () => {
-  it('accepts a minimal item with only a name (FR-003: quantity/price are optional)', () => {
+  it('accepts a minimal item with only a name (001 FR-003: quantity/price are optional)', () => {
     expect(validateCreateGiftItem({ name: 'Coffee maker' })).toBeNull();
   });
 

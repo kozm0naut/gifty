@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { validateConfig } from '../../src/config/index.js';
 
 /**
- * T022 — Boot-gate tests (US3, FR-005 / FR-006, SC-004).
+ * T022 — Boot-gate tests (US3, 003 FR-005 / 003 FR-006, 003 SC-004).
  *
  * The startup gate (`validateConfig()`) MUST, in a production context, refuse
  * to boot when the session-signing secret is missing / below the minimum
  * strength / a known default, or when the database credential is a known
  * default. Each refusal message MUST identify WHICH value failed and WHAT MUST
- * CHANGE so an operator can remediate without documentation (FR-005). Local
+ * CHANGE so an operator can remediate without documentation (003 FR-005). Local
  * development is NOT blocked by the production-only rules (edge case "Weak
  * secret in a non-production context").
  *
@@ -30,6 +30,11 @@ const ENV_KEYS = [
   'LOGIN_MAX_FAILURES_PER_ACCOUNT',
   'ACCESS_TOKEN_TTL_MINUTES',
   'SESSION_MAX_AGE_DAYS',
+  'EMAIL_ENABLED',
+  'EMAIL_TRANSPORT',
+  'RESEND_API_KEY',
+  'RESEND_FROM',
+  'GIFTY_PUBLIC_ORIGIN',
 ];
 
 // A strong, non-default signing secret (>= 32 chars, not on the deny-list).
@@ -55,7 +60,7 @@ beforeEach(() => {
   delete process.env.POSTGRES_PASSWORD;
   delete process.env.JWT_SECRET_MIN_LENGTH;
   // Reset the rate-limit / session knobs to their built-in defaults so the
-  // FR-001/FR-007 cross-checks in validateConfig() cannot interfere.
+  // 003 FR-001/003 FR-007 cross-checks in validateConfig() cannot interfere.
   delete process.env.RATE_LIMIT_WINDOW_MINUTES;
   delete process.env.LOGIN_MAX_FAILURES_PER_SOURCE;
   delete process.env.REGISTER_MAX_FAILURES_PER_SOURCE;
@@ -64,6 +69,14 @@ beforeEach(() => {
   delete process.env.SESSION_MAX_AGE_DAYS;
   delete process.env.CORS_ORIGINS;
   delete process.env.CSP_FONT_ORIGIN;
+  // Feature 004: keep the email gate out of scope for this 003 boot-gate suite
+  // by disabling email — the production email gate (EMAIL_ENABLED + RESEND_API_KEY)
+  // is exercised by tests/unit/email-boot-gate.test.ts.
+  process.env.EMAIL_ENABLED = 'false';
+  delete process.env.EMAIL_TRANSPORT;
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_FROM;
+  delete process.env.GIFTY_PUBLIC_ORIGIN;
 });
 
 afterEach(() => {
@@ -73,11 +86,11 @@ afterEach(() => {
   }
 });
 
-describe('boot gate — production refusals (FR-005 / FR-006)', () => {
+describe('boot gate — production refusals (003 FR-005 / 003 FR-006)', () => {
   it('refuses to boot when JWT_SECRET is missing, naming the value and remedy', () => {
     delete process.env.JWT_SECRET;
     expect(() => validateConfig()).toThrowError(/JWT_SECRET/);
-    // The message must say what must change (FR-005).
+    // The message must say what must change (003 FR-005).
     expect(() => validateConfig()).toThrowError(/at least \d+ characters|must be set/i);
   });
 

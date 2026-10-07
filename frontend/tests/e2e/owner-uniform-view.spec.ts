@@ -12,7 +12,7 @@ import type { Page } from '@playwright/test';
 // API origin mirrors helpers.ts (BASE_URL when targeting the container).
 const API_BASE = process.env.BASE_URL || 'http://localhost:4000';
 
-/** Set the recipient's name-disclosure consent directly (FR-023). */
+/** Set the recipient's name-disclosure consent directly (003 FR-023). */
 async function setConsent(cookie: string, listId: string, consent: 'revealed' | 'declined'): Promise<string> {
   const response = await fetch(`${API_BASE}/lists/${listId}/consent`, {
     method: 'POST',
@@ -25,8 +25,8 @@ async function setConsent(cookie: string, listId: string, consent: 'revealed' | 
 }
 
 /**
- * Phase 12 (T062) — the owner's share-management view is uniform (FR-010,
- * FR-021, US5/AC consent):
+ * Phase 12 (T062) — the owner's share-management view is uniform (003 FR-010,
+ * 003 FR-021, US5/AC consent):
  *
  * A list owner must NOT be able to tell — from the owner's share view —
  * which invited emails are registered users and which are not, and must NOT
@@ -56,7 +56,7 @@ async function openSharingView(page: Page, listId: string): Promise<void> {
   await page.locator('button.share-btn[aria-label="Manage Sharing"]').click();
 }
 
-test.describe('owner uniform share view (T062, FR-010/FR-021)', () => {
+test.describe('owner uniform share view (T062, 003 FR-010/003 FR-021)', () => {
   test('registered-unconsented and unregistered invitees render identically; the name appears only after consent', async ({ page }) => {
     const ownerEmail = uniqueEmail('ouv-owner');
     const regEmail = uniqueEmail('ouv-reg');

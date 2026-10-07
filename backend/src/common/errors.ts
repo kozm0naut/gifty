@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 /**
- * FR-011: the single stable body for internal (server-side) failures in
+ * 003 FR-011: the single stable body for internal (server-side) failures in
  * production. It never carries a stack trace, file path, query, or driver
  * detail — the only thing a caller learns is that *something* went wrong.
  */
@@ -30,7 +30,7 @@ export function errorHandler(
   }
 
   const status = (err as any).status || 500;
-  // FR-011: in production, every 5xx collapses to the stable generic body —
+  // 003 FR-011: in production, every 5xx collapses to the stable generic body —
   // the raw error text (which may name a file, table, or driver) is never
   // echoed. 4xx keep their specific, stable message (the `{ message }` shape
   // the client and inline router errors use).

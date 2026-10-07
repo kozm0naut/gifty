@@ -6,8 +6,27 @@ import { loadConfig } from '../config/index.js';
 import { resolveSessionForAccess } from './session.js';
 
 export type AuthenticatedRequest = Request & {
-  user?: { id: string; email: string; displayName: string };
+  user?: { id: string; email: string; displayName: string; verifiedAt: Date | null };
 };
+
+/**
+ * Feature 004 (US2, 004 FR-012): gate authenticated routes on a confirmed email.
+ *
+ * Composed AFTER `requireAuth` (which populates `req.user`). The gate is a
+ * no-op when the email feature is `disabled` (accounts auto-confirm), so a
+ * single code path serves both modes. An unconfirmed caller (verifiedAt null)
+ * receives a STABLE 403 body on every gated route — the message never varies
+ * by route, so the surface does not reveal which endpoints exist (004 FR-010).
+ */
+export function requireConfirmed(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (loadConfig().email.mode === 'disabled') {
+    return next();
+  }
+  if (req.user?.verifiedAt != null) {
+    return next();
+  }
+  return res.status(403).json({ message: 'Please confirm your email to continue.' });
+}
 
 /**
  * Returns the JWT signing secret, failing fast when it is not configured.
@@ -23,10 +42,10 @@ export function getJwtSecret(): string {
 }
 
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  // Feature 003 (US4 / T012 / T017 / SC-007): the `Authorization: Bearer`
+  // Feature 003 (US4 / T012 / T017 / 003 SC-007): the `Authorization: Bearer`
   // header and the legacy `token` bridge are formally RETIRED. The access
   // credential is now exclusively the script-unreadable `gifty_access`
-  // HttpOnly cookie (contracts/api.md, FR-009).
+  // HttpOnly cookie (contracts/api.md, 003 FR-009).
   const cookieToken = parseCookie(req.headers.cookie ?? '')[loadConfig().cookies.accessName];
 
   if (!cookieToken) {
@@ -42,7 +61,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
 
     // Cookie-backed access JWTs carry the `sid` claim — confirm the
     // UserSession row is live, rejecting revoked/expired sessions even before
-    // the token's own `exp` (FR-008).
+    // the token's own `exp` (003 FR-008).
     if (typeof payload.sid === 'string') {
       const resolved = await resolveSessionForAccess(cookieToken);
       if (!resolved || resolved.userId !== userId) {
@@ -52,13 +71,18 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, displayName: true },
+      select: { id: true, email: true, displayName: true, verifiedAt: true },
     });
     if (!user) {
       return res.status(401).json({ message: 'Your account is no longer active.' });
     }
 
-    req.user = { id: user.id, email: user.email, displayName: user.displayName };
+    req.user = {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      verifiedAt: user.verifiedAt,
+    };
     next();
   } catch (_error) {
     return res.status(401).json({ message: 'Invalid or expired token' });

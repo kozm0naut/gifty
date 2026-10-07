@@ -1,6 +1,7 @@
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { AuthPage } from './pages/AuthPage';
+import { ConfirmPage } from './pages/ConfirmPage';
 import { Dashboard } from './pages/DashboardPage';
 import { ListPage } from './pages/ListPage';
 import { AccountPage } from './pages/AccountPage';
@@ -68,6 +69,10 @@ function AppContent() {
       <main className={isAuthRoute ? 'app-main app-main--bare' : 'app-main'}>
         <Routes>
           <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
+          {/* US2: the confirmation page handles its own auth state — it renders
+              for both an unconfirmed-with-session and a no-session (cold link)
+              visitor, and redirects to the dashboard once verified. */}
+          <Route path="/confirm" element={<ConfirmPage />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           {/* The account area lives at /me — /account is taken by the API
               session-bootstrap endpoint (GET /account), and Express serves
@@ -85,7 +90,7 @@ function AppContent() {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isInitializing } = useAuth();
+  const { isAuthenticated, isVerified, isInitializing } = useAuth();
   // Wait for the cookie-backed bootstrap (GET /account) before deciding —
   // otherwise an authenticated user is bounced to /auth on first paint and
   // back again once the session resolves (the race the old comment warned about).
@@ -94,6 +99,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
+  }
+  // US2: authenticated but unconfirmed (email feature on) → confirmation page.
+  if (!isVerified) {
+    return <Navigate to="/confirm" replace />;
   }
 
   return <>{children}</>;

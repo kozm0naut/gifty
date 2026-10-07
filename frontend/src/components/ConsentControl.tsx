@@ -11,7 +11,7 @@ interface ConsentControlProps {
 }
 
 /**
- * US5 (FR-023): self-serve control in a recipient's list view to identify
+ * US5 (003 FR-023): self-serve control in a recipient's list view to identify
  * themselves (reveal their display name) or hide it again. Visible only to
  * recipients (the owner is not subject to name-disclosure consent).
  *

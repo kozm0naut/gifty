@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 
 // Walk a directory tree, yielding every JS/TS source file (used by the
-// append-only audit assertions in the FR-013 block below).
+// append-only audit assertions in the 003 FR-013 block below).
 function* walk(dir: string): Generator<string> {
   for (const entry of readdirSync(dir)) {
     const p = join(dir, entry);
@@ -37,7 +37,7 @@ describe('recordAuditEvent (T009)', () => {
   it('is fire-and-forget: never rejects the caller even when the insert fails', async () => {
     (prisma.auditEvent.create as any).mockRejectedValue(new Error('db down'));
 
-    // Must not throw / reject into the request path (FR-013).
+    // Must not throw / reject into the request path (003 FR-013).
     await expect(
       recordAuditEvent({
         action: 'auth_login_failure',
@@ -102,11 +102,17 @@ describe('recordAuditEvent (T009)', () => {
 
     // 13 actions from the original security-hardening baseline (data-model.md)
     // plus the two US5 (consent) actions: `consent_updated` and
-    // `invitation_matched`. Both are security-relevant, so FR-013 requires a
-    // recordable audit action for each.
-    expect(AUDIT_ACTIONS).toHaveLength(15);
+    // `invitation_matched`. Both are security-relevant, so 003 FR-013 requires a
+    // recordable audit action for each. Feature 004 (email integration) adds
+    // four more (D7): `email_invite_queued`, `email_confirmation_queued`,
+    // `email_delivered`, `email_failed` — so the vocabulary is 19.
+    expect(AUDIT_ACTIONS).toHaveLength(19);
     expect(AUDIT_ACTIONS).toContain('consent_updated');
     expect(AUDIT_ACTIONS).toContain('invitation_matched');
+    expect(AUDIT_ACTIONS).toContain('email_invite_queued');
+    expect(AUDIT_ACTIONS).toContain('email_confirmation_queued');
+    expect(AUDIT_ACTIONS).toContain('email_delivered');
+    expect(AUDIT_ACTIONS).toContain('email_failed');
     for (const action of AUDIT_ACTIONS) {
       (prisma.auditEvent.create as any).mockClear();
       await recordAuditEvent({ action, outcome: 'success' });
@@ -141,17 +147,18 @@ describe('recordAuditEvent (T009)', () => {
   });
 });
 
-describe('FR-013 append-only audit trail (T064)', () => {
+describe('003 FR-013 append-only audit trail (T064)', () => {
   it('AuditEvent schema is append-only: createdAt present, no updatedAt', () => {
     const schema = readFileSync(
       join(here, '../../prisma/schema.prisma'),
       'utf8',
     );
     // Isolate the AuditEvent model block (from its header to the closing
-    // brace at column 0).
+    // brace at column 0). The split is line-ending-agnostic so it works
+    // whether the file uses LF or CRLF.
     const model = schema
       .split('model AuditEvent {')[1]
-      .split('\n}\n')[0];
+      .split(/\r?\n}\r?\n/)[0];
 
     expect(model).toMatch(/createdAt\s+DateTime\s+@default\(now\(\)\)/);
     expect(model).not.toMatch(/updatedAt/);

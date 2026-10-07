@@ -4,7 +4,7 @@ import {
   PASSWORD_POLICY_MESSAGE,
 } from '../../src/auth/password-policy.js';
 
-describe('password policy (T011, FR-002)', () => {
+describe('password policy (T011, 003 FR-002)', () => {
   it('accepts a password that satisfies every rule', () => {
     const result = validatePasswordPolicy('Password123!');
     expect(result.ok).toBe(true);

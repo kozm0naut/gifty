@@ -4,7 +4,7 @@ import { prisma } from '../../src/prisma.js';
 import { createApp } from '../../src/app.js';
 
 /**
- * T041 — Share enumeration tests (FR-010, SC-009, US6 scenario 1).
+ * T041 — Share enumeration tests (003 FR-010, 003 SC-009, US6 scenario 1).
  *
  * US6 independent test, contract form:
  *   - `POST /lists/:listId/share` to a **registered** email and to an
@@ -59,8 +59,8 @@ beforeEach(async () => {
   await prisma.user.deleteMany();
 });
 
-describe('T041 share enumeration (FR-010, SC-009)', () => {
-  it('a registered email and an unregistered email produce an indistinguishable share response (FR-010)', async () => {
+describe('T041 share enumeration (003 FR-010, 003 SC-009)', () => {
+  it('a registered email and an unregistered email produce an indistinguishable share response (003 FR-010)', async () => {
     const app = await createApp();
     const owner = await register(app, 't41-owner', 'Owner');
     const unknownEmail = uniqueEmail('t41-unknown');
@@ -88,7 +88,7 @@ describe('T041 share enumeration (FR-010, SC-009)', () => {
       .set('Cookie', `gifty_access=${owner.access}`)
       .send({ recipientEmail: unknownEmail, permission: 'shared' });
 
-    // Same status code (FR-010): no 404 / no 200-vs-201 distinction.
+    // Same status code (003 FR-010): no 404 / no 200-vs-201 distinction.
     expect(byRegisteredEmail.status).toBe(201);
     expect(byUnknownEmail.status).toBe(byRegisteredEmail.status);
 
@@ -154,7 +154,7 @@ describe('T041 share enumeration (FR-010, SC-009)', () => {
       .send({ recipientEmail: regEmail, permission: 'shared' });
 
     // A re-share must not downgrade to a 200 / different shape that a probe
-    // could use to infer the account already exists (SC-009).
+    // could use to infer the account already exists (003 SC-009).
     expect(first.status).toBe(201);
     expect(again.status).toBe(first.status);
     // Same shape and fixed values (the per-call neutral `id` may differ).

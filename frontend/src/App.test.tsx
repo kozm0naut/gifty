@@ -151,7 +151,7 @@ describe('App login flow', () => {
     // The dashboard's initial load receives a 401; the single refresh
     // attempt is rejected ("revoked"), the app clears its session state
     // and redirects to the sign-in page with the plain (non-security)
-    // FR-027 notice.
+    // 003 FR-027 notice.
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });

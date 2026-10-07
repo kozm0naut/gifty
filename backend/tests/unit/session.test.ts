@@ -196,7 +196,7 @@ describe('resolveSessionForAccess (T008)', () => {
     expect(result).toEqual({ userId: 'user-1', sessionId: 'sess-1' });
   });
 
-  it('rejects a token whose session has been revoked (FR-008)', async () => {
+  it('rejects a token whose session has been revoked (003 FR-008)', async () => {
     const token = issueAccessToken('user-1', 'sess-1');
     (prisma.user.findUnique as any).mockResolvedValue({ id: 'user-1' });
     (prisma.userSession.findUnique as any).mockResolvedValue({
@@ -210,7 +210,7 @@ describe('resolveSessionForAccess (T008)', () => {
     expect(result).toBeNull();
   });
 
-  it('rejects a token whose session has expired (FR-008)', async () => {
+  it('rejects a token whose session has expired (003 FR-008)', async () => {
     const token = issueAccessToken('user-1', 'sess-1');
     (prisma.user.findUnique as any).mockResolvedValue({ id: 'user-1' });
     (prisma.userSession.findUnique as any).mockResolvedValue({
