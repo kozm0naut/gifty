@@ -92,7 +92,7 @@ async function share(app: App, listId: string, ownerCookie: string, recipientEma
     .send({ recipientEmail, permission: 'shared' });
 }
 
-describe('US4 — Reliable, Queued Delivery (004 FR-007, 004 FR-008, 004 SC-004, 004 SC-007)', () => {
+describe('US4 — Reliable, Queued Delivery (004 FR-007, 004 FR-006, 004 SC-004, 004 SC-007)', () => {
   let app: App;
   const savedEnv: Record<string, string | undefined> = {};
 

@@ -25,7 +25,7 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * 004 FR-008 / contracts/api.md: build the US1 invite email content. Subject and
+ * 004 FR-001 / contracts/api.md: build the US1 invite email content. Subject and
  * bodies are fixed; the only dynamic data is the owner's display name and the
  * public origin. The link is the home page — no token, no deep link, no raw
  * list id (004 FR-013).
@@ -297,7 +297,7 @@ export function createListRouter() {
     // and status are identical regardless of email mode.
     const emailEnabled = loadConfig().email.mode !== 'disabled';
 
-    // Owner's display name personalizes the invite (004 FR-008). Fetched once; on
+    // Owner's display name personalizes the invite (004 FR-001). Fetched once; on
     // failure we fall back to the neutral 'Someone' phrasing so the share
     // never fails because of a display-name lookup (004 FR-006).
     let ownerDisplayName: string | null = null;

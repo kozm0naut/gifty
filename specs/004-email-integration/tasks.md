@@ -291,3 +291,7 @@ The minimum viable product is **US1 (invite email)** + **US2 (confirmation email
 ## Phase 12: Convergence
 
 - [x] T038 Fix stale SC cross-reference in `frontend/src/pages/ConfirmPage.tsx` per FR-004 (contradicts) — L12 comment "uniform … uninformative for UX (FR-010 / SC-006)"→"(FR-004 / FR-010)" (SC-006 is production startup refusal, not the uniform confirm outcome; FR-004 is the correct ref for uniform non-error outcome). Comments-only, zero behavior change
+
+## Phase 13: Convergence
+
+- [x] T039 Fix stale `004 FR-008` cross-references (contradicts) — `004 FR-008` is the dev/test **capture** requirement (US5), not invite-content or queued-delivery, so the two invite-content refs and the US4 delivery ref are wrong. `backend/src/gift-lists/router.ts` L28 docblock "build the US1 invite email content … (004 FR-008)" → `004 FR-001` (US1 invite content; the trailing `(004 FR-013)` link ref is already correct); L300 "Owner's display name personalizes the invite (004 FR-008)" → `004 FR-001`. `backend/tests/outbox-drainer.test.ts` L95 `describe('US4 — Reliable, Queued Delivery (004 FR-007, 004 FR-008, 004 SC-004, 004 SC-007)')` → drop `004 FR-008` and use `004 FR-006` (queue before delivery / never block) alongside `004 FR-007` (retry + terminal failed). `backend/tests/capture-mode.test.ts` L2 & L93 correctly cite `004 FR-008` (US5 capture) — do NOT change. Comments/test-names only, zero behavior change
