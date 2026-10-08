@@ -146,9 +146,15 @@ jobs:
 
       # --- SHIP: push the exact image we just validated to GHCR -------------
       - name: Push image to GHCR
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -eu
-          for t in ${{ steps.meta.outputs.tags }}; do
+          # metadata-action emits one tag per line; keep the `for` list on a
+          # single logical line by word-splitting the env var at runtime
+          # (default IFS splits on space/tab/newline) instead of inlining the
+          # multi-line expansion, which breaks bash parsing.
+          for t in $TAGS; do
             echo "pushing $t"
             docker push "$t"
           done
