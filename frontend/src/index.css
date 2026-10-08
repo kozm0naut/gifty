@@ -1562,7 +1562,6 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
 }
 .confirm-page--center {
   align-items: center;
@@ -1570,7 +1569,6 @@ h1 {
 .confirm-card {
   max-width: 26rem;
   width: 100%;
-  padding: 1.25rem;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -1604,11 +1602,10 @@ h1 {
 .confirm-note {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--color-text);
+  color: var(--color-faint)
 }
 .confirm-resend {
   min-width: 14rem;
-  margin-top: 0.5rem;
 }
 .confirm-msg {
   margin: 0;

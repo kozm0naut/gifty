@@ -12,6 +12,7 @@ export function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,11 +20,17 @@ export function AuthPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError(null);
 
-    const payload: AuthPayload = mode === 'register' 
-      ? { email, password, displayName } 
+    if (mode === 'register' && password !== passwordConfirmation) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const payload: AuthPayload = mode === 'register'
+      ? { email, password, displayName }
       : { email, password };
 
     try {
@@ -65,7 +72,11 @@ export function AuthPage() {
           {sessionNotice.message}
         </div>
       )}
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <div className="alert alert-error" id="auth-error" role="alert">
+          {error}
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="form-stack">
         <div className="field">
           <label className="field-label" htmlFor="auth-email">Email</label>
@@ -89,6 +100,20 @@ export function AuthPage() {
             className="input"
           />
         </div>
+        {mode === 'register' && (
+          <div className="field">
+            <label className="field-label" htmlFor="auth-password-confirm">Confirm Password</label>
+            <input
+              id="auth-password-confirm"
+              type="password"
+              value={passwordConfirmation}
+              onChange={(e) => setPasswordConfirmation(e.target.value)}
+              required
+              aria-describedby={error ? 'auth-error' : undefined}
+              className="input"
+            />
+          </div>
+        )}
         {mode === 'register' && (
           <div className="field">
             <label className="field-label" htmlFor="auth-name">Display Name</label>
