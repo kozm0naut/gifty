@@ -1,0 +1,197 @@
+# Deploy the prebuilt Gifty image to the remote server.
+#
+# Why build here and not on the server: the target host has ~1 GB RAM and cannot
+# build the multi-stage image (frontend + backend + prisma) without OOM. So we
+# build on a clean GitHub runner, run the e2e suite as a deploy gate, push the
+# image to GHCR, and have the (dumb) docker host pull + run it. The server holds
+# only docker-compose.yml + .env — no source, no build.
+#
+# Flow: build (load) -> tag gifty-app -> compose up -> e2e gate -> teardown
+#       -> push GHCR -> SSH deploy (pull, tag, up --no-build, /healthz gate).
+#
+# Required repo SECRETS:
+#   DEPLOY_SSH_PRIVATE_KEY  private key whose public key is on the server's 'gifty' user
+#   JWT_SECRET              strong (>=32 chars), stable across deploys
+#   POSTGRES_PASSWORD       strong, MUST stay stable after the first deploy
+#                           (baked into the postgres data volume on first init)
+#   RESEND_API_KEY          optional — live email (else the server runs EMAIL_ENABLED=false)
+# Required repo VARIABLES:
+#   DEPLOY_HOST             e.g. 199.192.23.10
+#   DEPLOY_USER             e.g. gifty
+#   EMAIL_ENABLED           e.g. false (default)
+#   RESEND_FROM             optional live-email sender
+name: Deploy to server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/gifty
+  # CI test phase: force email capture mode (offline, deterministic — 004 FR-008)
+  # so the production boot gate passes on a runner with no Resend credential.
+  EMAIL_TRANSPORT: capture
+
+jobs:
+  build-and-deploy:
+    name: "Build, e2e gate, push, deploy"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Preflight (required secrets/vars present)
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -eu
+          missing=""
+          [ -n "$JWT_SECRET" ]             || missing="$missing JWT_SECRET(secret)"
+          [ -n "$POSTGRES_PASSWORD" ]      || missing="$missing POSTGRES_PASSWORD(secret)"
+          [ -n "$DEPLOY_SSH_PRIVATE_KEY" ] || missing="$missing DEPLOY_SSH_PRIVATE_KEY(secret)"
+          [ -n "$DEPLOY_HOST" ]            || missing="$missing DEPLOY_HOST(variable)"
+          [ -n "$DEPLOY_USER" ]            || missing="$missing DEPLOY_USER(variable)"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required GitHub secrets/variables:$missing"
+            echo "Add them under repo Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          if [ "${#JWT_SECRET}" -lt 32 ]; then
+            echo "::error::JWT_SECRET must be at least 32 characters (got ${#JWT_SECRET})."
+            exit 1
+          fi
+          echo "Preflight OK"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest
+
+      - name: Build image (load into docker)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Tag the built image as the name the compose file expects, so the
+      # test phase (and the server) reuse it via --no-build instead of rebuilding.
+      - name: Tag as gifty-app for compose
+        run: docker tag "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" gifty-app
+
+      # --- DEPLOY GATE: the existing e2e suite must pass before we ship ------
+      - name: Seed test credentials (JWT_SECRET + POSTGRES_PASSWORD)
+        run: node scripts/ensure-env.mjs
+
+      - name: Start stack (no-build) + wait ready
+        run: |
+          set -eu
+          docker compose up -d --no-build
+          for i in $(seq 1 120); do
+            if curl -fs http://localhost:8080/healthz > /dev/null 2>&1; then
+              echo "Gifty is ready (CI)"
+              curl -fs http://localhost:8080/healthz; echo
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Gifty did not report ready within 2 minutes"
+          docker compose logs --no-color
+          exit 1
+
+      - name: Run Playwright e2e (deploy gate)
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          BASE_URL=http://localhost:8080 npx playwright test
+        env:
+          CI: true
+
+      - name: Teardown test stack
+        if: always()
+        run: docker compose down --volumes || true
+
+      # --- SHIP: push the exact image we just validated to GHCR -------------
+      - name: Push image to GHCR
+        run: |
+          set -eu
+          for t in ${{ steps.meta.outputs.tags }}; do
+            echo "pushing $t"
+            docker push "$t"
+          done
+
+      - name: Prepare SSH key + known_hosts
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          set -eu
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          EMAIL_ENABLED: ${{ vars.EMAIL_ENABLED }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ vars.RESEND_FROM }}
+          GIFTY_PUBLIC_ORIGIN: ${{ vars.GIFTY_PUBLIC_ORIGIN }}
+        run: |
+          set -eu
+          KEY="$HOME/.ssh/deploy_key"
+          DEST="$DEPLOY_USER@$DEPLOY_HOST"
+          ssh -i "$KEY" -o BatchMode=yes "$DEST" "mkdir -p ~/gifty"
+          scp -i "$KEY" -o BatchMode=yes docker-compose.yml "$DEST:~/gifty/docker-compose.yml"
+          scp -i "$KEY" -o BatchMode=yes deploy/server-deploy.sh "$DEST:~/gifty/server-deploy.sh"
+          # The env assignments MUST live inside the remote command string —
+          # `VAR=... ssh host cmd` only sets them on the local ssh process and
+          # does NOT cross the connection. Single-quoting each value is safe
+          # here: none of our values contain a single quote, and the local shell
+          # expands the double-quoted string before it is sent.
+          ssh -i "$KEY" -o BatchMode=yes "$DEST" \
+            "IMAGE_REF='$IMAGE_REF' GHCR_USER='$GHCR_USER' GHCR_TOKEN='$GHCR_TOKEN' \
+             JWT_SECRET='$JWT_SECRET' POSTGRES_PASSWORD='$POSTGRES_PASSWORD' \
+             EMAIL_ENABLED='${EMAIL_ENABLED:-false}' RESEND_API_KEY='${RESEND_API_KEY:-}' \
+             RESEND_FROM='${RESEND_FROM:-}' GIFTY_PUBLIC_ORIGIN='${GIFTY_PUBLIC_ORIGIN:-}' \
+             bash ~/gifty/server-deploy.sh"
