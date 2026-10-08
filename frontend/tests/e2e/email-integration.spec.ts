@@ -104,6 +104,7 @@ async function registerViaUI(page: Page, email: string, displayName: string): Pr
   await page.getByRole('button', { name: /don't have an account/i }).click();
   await page.fill('#auth-email', email);
   await page.fill('#auth-password', E2E_PASSWORD);
+  await page.fill('#auth-password-confirm', E2E_PASSWORD);
   await page.fill('#auth-name', displayName);
   await page.getByRole('button', { name: 'Register', exact: true }).click();
   // US2: an unconfirmed sign-up is routed to the confirmation page.
