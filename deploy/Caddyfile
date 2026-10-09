@@ -5,7 +5,13 @@
 # Let's Encrypt (HTTP-01 needs port 80, which stays closed). Pair this with
 # Cloudflare SSL/TLS mode = Full (non-strict), which accepts a self-signed
 # origin cert. Traffic is then forwarded to the app over the compose network.
-:443 {
+#
+# The site address names the hosts explicitly (a bare `:443` has no hostname,
+# so `tls internal` had nothing to mint a certificate for -> handshake failed).
+# `gifty.tmansbridge.com` is the real origin (for Cloudflare); `localhost` lets
+# the on-box readiness probe reach /healthz over TLS. `tls internal` mints a
+# self-signed cert for each host listed here.
+gifty.tmansbridge.com, localhost {
 	tls internal
 
 	reverse_proxy app:4000
