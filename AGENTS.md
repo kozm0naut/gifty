@@ -24,6 +24,13 @@ For local iteration (hot reload, host-side tests) instead of Docker, from the re
 - Frontend typecheck: no local `tsc` in `frontend/` — reuse the backend's (Windows: `cd frontend; ..\backend\node_modules\.bin\tsc.cmd -p tsconfig.json --noEmit`)
 - **GitHub Codespaces exception (verified 2026-09-24):** Codespaces DinD drops inter-container bridge traffic, so use `docker compose -f docker-compose.codespace.yml up --build -d` (host networking; app↔Postgres over loopback) instead of `docker compose up`. See `docs/docker.md` §3b.
 
+### Terminal (PowerShell 5.1) — avoid quote/brace mangling
+The AI command layer strips/rewrites inline double quotes, `$var`, backticks, and braces. Rules:
+- **JSON / bodies:** never inline `{...}` — write to a file and pass `-d @file`.
+- **Backtick `` ` ``:** PS escape char — can vanish or be re-interpreted (e.g. `` `" ``). Avoid it in inline commands; prefer single-quoted strings and `@file` bodies.
+- **SQL to psql:** don't use `-c` with double-quoted identifiers; put SQL in a single-quoted PS string and pipe via stdin: `$sql | docker exec -i gifty-postgres-1 psql -U gifty -d gifty -At`. (Dev DB tables are PascalCase: `OutboxMessage`, `User`, `GiftList`, …; columns as in the Prisma schema, e.g. `bodyText`, `recipientEmail`.)
+- **`git push`:** PS reports stderr as `NativeCommandError` (exit 1) even on success — verify via `git rev-parse HEAD` vs `origin/<branch>`, not the error text.
+
 ### Crucial Files for Context
 - **Project State & Memory**: `.agents/memories.md` tracks progress, current focus, and high-level implementation status.
 - **Specifications & Planning**:
