@@ -1,0 +1,12 @@
+# Gifty TLS termination (self-signed).
+#
+# Caddy is the single public edge on :443. `tls internal` makes Caddy generate
+# a self-signed certificate per requested hostname instead of contacting
+# Let's Encrypt (HTTP-01 needs port 80, which stays closed). Pair this with
+# Cloudflare SSL/TLS mode = Full (non-strict), which accepts a self-signed
+# origin cert. Traffic is then forwarded to the app over the compose network.
+:443 {
+	tls internal
+
+	reverse_proxy app:4000
+}

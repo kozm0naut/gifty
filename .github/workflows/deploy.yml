@@ -188,7 +188,11 @@ jobs:
           KEY="$HOME/.ssh/deploy_key"
           DEST="$DEPLOY_USER@$DEPLOY_HOST"
           ssh -i "$KEY" -o BatchMode=yes "$DEST" "mkdir -p ~/gifty"
-          scp -i "$KEY" -o BatchMode=yes docker-compose.yml "$DEST:~/gifty/docker-compose.yml"
+          # Ship the SERVER compose (Caddy TLS edge on :443, app internal-only)
+          # under the standard name so `docker compose` on the box finds it,
+          # plus the Caddyfile it references and the deploy script.
+          scp -i "$KEY" -o BatchMode=yes docker-compose.server.yml "$DEST:~/gifty/docker-compose.yml"
+          scp -i "$KEY" -o BatchMode=yes deploy/Caddyfile "$DEST:~/gifty/Caddyfile"
           scp -i "$KEY" -o BatchMode=yes deploy/server-deploy.sh "$DEST:~/gifty/server-deploy.sh"
           # The env assignments MUST live inside the remote command string —
           # `VAR=... ssh host cmd` only sets them on the local ssh process and

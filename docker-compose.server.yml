@@ -1,0 +1,91 @@
+# Gifty — SERVER compose (TLS-terminating).
+#
+# Self-contained variant of docker-compose.yml for the production VPS. It
+# mirrors the base but with two deliberate differences:
+#   1. The app publishes NO host port — it is reached only via Caddy, so the
+#      app is not exposed as plain HTTP on a public port.
+#   2. A Caddy service terminates HTTPS on host :443 (self-signed, `tls
+#      internal`) and reverse-proxies to the app. This satisfies Cloudflare
+#      "Full (non-strict)" without an open port 80 or a public CA.
+#
+# Local dev + the CI e2e gate keep using the base docker-compose.yml (app on
+# :8080, plain HTTP) so those flows are unchanged.
+#
+# The Caddyfile lives at deploy/Caddyfile and is copied to ./Caddyfile next to
+# this file on the server (see deploy/server-deploy.sh).
+
+services:
+  postgres:
+    image: postgres:16.9-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gifty
+      POSTGRES_USER: gifty
+      # REQUIRED — no default (003 FR-006); supplied via .env at `up` time.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - gifty_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # -h postgres: verify the TCP path the app actually uses, not the local
+      # unix socket (a socket-only check can pass while inter-container routing
+      # is not yet up).
+      test: ["CMD-SHELL", "pg_isready -h postgres -U gifty -d gifty"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - gifty_net
+
+  app:
+    image: gifty-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # PORT is fixed to 4000 inside the image (Dockerfile ENV); there is NO
+      # host-side `ports:` mapping here — Caddy is the only public edge.
+      DATABASE_URL: postgresql://gifty:${POSTGRES_PASSWORD}@postgres:5432/gifty?schema=public
+      # Required — injected from .env at `up` time; no default is permitted.
+      JWT_SECRET: ${JWT_SECRET}
+      # Optional operator settings (003 US2): unset = closed / default.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      CSP_FONT_ORIGIN: ${CSP_FONT_ORIGIN:-}
+      # Feature 004 (email): operator-supplied, no defaults (mirrors JWT_SECRET).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-}
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # node:alpine has no curl; Node 22's global fetch is used instead.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - gifty_net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    networks:
+      - gifty_net
+
+networks:
+  gifty_net:
+    driver: bridge
+
+volumes:
+  gifty_postgres_data:
+  caddy_data:
+  caddy_config:
