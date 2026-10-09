@@ -185,10 +185,67 @@ textarea {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.nav-user-menu {
+  position: relative;
+}
+
 .nav-user-cluster {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  background: transparent;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.nav-user-cluster:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav-user-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  background: #20202c;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.nav-user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.nav-user-menu-item:hover {
+  background: var(--color-surface-2);
+}
+
+.nav-user-menu-panel .nav-logout {
+  width: auto;
+  height: auto;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-muted);
 }
 
 .nav-avatar {

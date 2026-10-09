@@ -4,6 +4,7 @@ import {
   apiCreateList,
   apiShareList,
   loginViaUI,
+  logoutViaUI,
   uniqueEmail,
   E2E_PASSWORD,
 } from './helpers';
@@ -38,10 +39,10 @@ async function setConsent(cookie: string, listId: string, consent: 'revealed' | 
 
 async function switchToOwner(page: Page, email: string): Promise<void> {
   await page.goto('/');
-  const logout = page.locator('button.nav-logout');
-  if (await logout.count()) {
-    await logout.click();
-    await page.waitForSelector('#auth-email', { timeout: 10000 });
+  // A signed-in session shows the avatar/name cluster; logout lives in the
+  // user menu it opens.
+  if (await page.locator('.nav-user-cluster').count()) {
+    await logoutViaUI(page);
   } else {
     await page.waitForSelector('#auth-email', { timeout: 10000 });
   }

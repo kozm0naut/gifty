@@ -312,9 +312,16 @@ describe('ConfirmPage', () => {
       );
     });
 
-    // Signed-in but unconfirmed → the resend card is up and the header logout
-    // button is present.
+    // Signed-in but unconfirmed → the resend card is up and the header user
+    // cluster is present.
     expect(container.textContent).toContain('A link is on its way');
+    const userCluster = container.querySelector('.nav-user-cluster') as HTMLButtonElement;
+    expect(userCluster).not.toBeNull();
+
+    // Log out lives inside the user menu — open the menu first.
+    await act(async () => {
+      fireEvent.click(userCluster);
+    });
     const logoutButton = container.querySelector('.nav-logout') as HTMLButtonElement;
     expect(logoutButton).not.toBeNull();
 
@@ -330,5 +337,47 @@ describe('ConfirmPage', () => {
     expect(container.querySelector('.nav-logout')).toBeNull(); // signed-out: nav gone
     expect(container.textContent).toContain('You are now logged out.');
     expect(container.textContent).not.toContain("This link didn't complete confirmation");
+  });
+
+  it('keeps the Account link inside the user menu rather than as a standalone nav link', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/account')) {
+          return {
+            ok: true,
+            json: async () => ({ user: { id: 'u1', email: 'a@b.com', displayName: 'A', verified: true } }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      }),
+    );
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/confirm']}>
+          <App />
+        </MemoryRouter>,
+      );
+    });
+
+    // Menu closed by default: no standalone Account nav link, no menu items.
+    expect(container.querySelector('.nav-link')).toBeNull();
+    expect(container.querySelector('.nav-user-menu-panel')).toBeNull();
+    expect(container.querySelector('.nav-logout')).toBeNull();
+
+    // Clicking the avatar/name opens the menu with Account + Log out.
+    await act(async () => {
+      fireEvent.click(container.querySelector('.nav-user-cluster') as HTMLElement);
+    });
+    const accountLink = container.querySelector('.nav-user-menu-panel a') as HTMLAnchorElement;
+    expect(accountLink).not.toBeNull();
+    expect(accountLink.textContent).toContain('Account');
+    expect(accountLink.getAttribute('href')).toBe('/me');
+    expect(container.querySelector('.nav-logout')).not.toBeNull();
   });
 });

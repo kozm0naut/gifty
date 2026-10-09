@@ -1,5 +1,5 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthPage } from './pages/AuthPage';
 import { ConfirmPage } from './pages/ConfirmPage';
 import { Dashboard } from './pages/DashboardPage';
@@ -33,6 +33,40 @@ function AppContent() {
     }
   }, [user]);
 
+  // The user menu (avatar/name → Account, Log out) starts closed.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the menu on outside click or Escape.
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpen]);
+
+  // Never leave the menu open if the session ends.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setMenuOpen(false);
+    }
+  }, [isAuthenticated]);
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -43,33 +77,55 @@ function AppContent() {
 
         {isAuthenticated && (
           <nav className="app-nav">
-            <Link to="/me" className="nav-link" title="Account settings">
-              Account
-            </Link>
-            <div className="nav-user-cluster">
-              <span
-                className="nav-avatar"
-                style={{ background: getNameColors(currentUserName, true).primary }}
-                title={currentUserName}
-              >
-                {getInitials(currentUserName)}
-              </span>
-              <span className="nav-user">{currentUserName}</span>
-              {/* Log out always lands on /auth. Protected routes would bounce
-                  there via the guard, but /confirm is unguarded — navigate
-                  explicitly so the logged-out notice is shown everywhere. */}
+            {/* Clicking the avatar/name opens the user menu (Account, Log out). */}
+            <div className="nav-user-menu" ref={userMenuRef}>
               <button
                 type="button"
-                className="nav-logout"
-                onClick={() => { void logout().then(() => navigate('/auth', { replace: true })); }}
-                title="Log out"
+                className="nav-user-cluster"
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                title={`${currentUserName} — open menu`}
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
+                <span
+                  className="nav-avatar"
+                  style={{ background: getNameColors(currentUserName, true).primary }}
+                >
+                  {getInitials(currentUserName)}
+                </span>
+                <span className="nav-user">{currentUserName}</span>
               </button>
+              {menuOpen && (
+                <div className="nav-user-menu-panel">
+                  <Link
+                    to="/me"
+                    className="nav-user-menu-item"
+                    title="Account settings"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Account
+                  </Link>
+                  {/* Log out always lands on /auth. Protected routes would bounce
+                      there via the guard, but /confirm is unguarded — navigate
+                      explicitly so the logged-out notice is shown everywhere. */}
+                  <button
+                    type="button"
+                    className="nav-logout"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      void logout().then(() => navigate('/auth', { replace: true }));
+                    }}
+                    title="Log out"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    <span>Log out</span>
+                  </button>
+                </div>
+              )}
             </div>
           </nav>
         )}

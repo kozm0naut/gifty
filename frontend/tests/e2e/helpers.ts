@@ -287,6 +287,7 @@ export async function loginViaUI(page: Page, email: string, password: string): P
  * Logs out via the nav bar and waits for the auth page to load.
  */
 export async function logoutViaUI(page: Page): Promise<void> {
+  await page.click('.nav-user-cluster');
   await page.click('button.nav-logout');
   await page.waitForSelector('#auth-email', { timeout: 10000 });
 }
