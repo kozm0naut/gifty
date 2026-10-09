@@ -284,4 +284,51 @@ describe('ConfirmPage', () => {
     expect(container.querySelector('[data-testid="confirm-success"]')).not.toBeNull();
     expect(container.textContent).toContain("You're confirmed!");
   });
+
+  it('logging out from /confirm navigates to /auth with the logged-out notice', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/auth/logout')) return { ok: true, status: 204 } as Response;
+        if (url.includes('/account')) {
+          return {
+            ok: true,
+            json: async () => ({ user: { id: 'u1', email: 'a@b.com', displayName: 'A', verified: false } }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      }),
+    );
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/confirm']}>
+          <App />
+        </MemoryRouter>,
+      );
+    });
+
+    // Signed-in but unconfirmed → the resend card is up and the header logout
+    // button is present.
+    expect(container.textContent).toContain('A link is on its way');
+    const logoutButton = container.querySelector('.nav-logout') as HTMLButtonElement;
+    expect(logoutButton).not.toBeNull();
+
+    // Act: click logout.
+    await act(async () => {
+      fireEvent.click(logoutButton);
+      // Let the async logout() promise + the navigation it triggers settle.
+      await Promise.resolve();
+    });
+
+    // Expectation: we are now on the sign-in page with the logged-out notice,
+    // NOT stuck on the /confirm no-session card (the old bug).
+    expect(container.querySelector('.nav-logout')).toBeNull(); // signed-out: nav gone
+    expect(container.textContent).toContain('You are now logged out.');
+    expect(container.textContent).not.toContain("This link didn't complete confirmation");
+  });
 });

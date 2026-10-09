@@ -1,4 +1,4 @@
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { AuthPage } from './pages/AuthPage';
 import { ConfirmPage } from './pages/ConfirmPage';
@@ -21,6 +21,7 @@ export default function App() {
 function AppContent() {
   const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const isAuthRoute = location.pathname === '/auth';
   const [currentUserName, setCurrentUserName] = useState(user?.displayName || 'User');
 
@@ -54,7 +55,15 @@ function AppContent() {
                 {getInitials(currentUserName)}
               </span>
               <span className="nav-user">{currentUserName}</span>
-              <button type="button" className="nav-logout" onClick={logout} title="Log out">
+              {/* Log out always lands on /auth. Protected routes would bounce
+                  there via the guard, but /confirm is unguarded — navigate
+                  explicitly so the logged-out notice is shown everywhere. */}
+              <button
+                type="button"
+                className="nav-logout"
+                onClick={() => { void logout().then(() => navigate('/auth', { replace: true })); }}
+                title="Log out"
+              >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                   <polyline points="16 17 21 12 16 7" />
