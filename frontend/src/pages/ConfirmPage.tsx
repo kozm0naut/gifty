@@ -16,8 +16,11 @@ import { BrandMark } from '../components/BrandMark';
  *  - verified                → success message + short auto-redirect to the
  *                              dashboard (gate lifted).
  *  - unconfirmed + session   → "a link is on its way" + expiry note + resend.
- *  - unconfirmed + no session→ cold visit (dead/expired link, fresh browser):
- *                              sign-in prompt (resend needs a session).
+ *  - unconfirmed + no session→ no live session (logged out / other browser).
+ *                              The link may already have confirmed the account
+ *                              server-side, but we can't observe that without a
+ *                              session — so we prompt sign-in WITHOUT claiming
+ *                              the link succeeded or failed.
  */
 
 export function ConfirmPage() {
@@ -102,8 +105,12 @@ export function ConfirmPage() {
     );
   }
 
-  // No live session (cold visit to a confirmation link in a fresh browser).
-  // Without a session we can't confirm or resend, so point them at sign-in.
+  // No live session (logged out, or the link opened in another browser). The
+  // backend may ALREADY have consumed a valid token and confirmed the account,
+  // but with no session the SPA can't call GET /account to observe that — so we
+  // must not claim the link failed (the old, misleading text) nor that it
+  // succeeded. Point them at sign-in: on login the confirmed state takes
+  // effect, or they resend if the link was stale.
   if (!isAuthenticated) {
     return (
       <div className="confirm-page confirm-page--center">
@@ -111,11 +118,12 @@ export function ConfirmPage() {
           <BrandMark className="confirm-brand" />
           <h1 className="confirm-title">Confirm your email</h1>
           <p className="confirm-body">
-            This link didn't complete confirmation.{' '}
+            You're not signed in to this browser.{' '}
             <Link to="/auth" className="confirm-link">
               Sign in to your account
             </Link>{' '}
-            and resend a fresh link.
+            to continue — if the link you opened just confirmed your email, you're
+            ready to go; if it was stale, resend a fresh one.
           </p>
         </div>
       </div>
