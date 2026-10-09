@@ -54,6 +54,10 @@ services:
       RESEND_FROM: ${RESEND_FROM:-}
       EMAIL_ENABLED: ${EMAIL_ENABLED:-}
       EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
+      # Public origin for email links (004 D9) — MUST be injected here; without
+      # it the app falls back to http://localhost:8080 and live confirm/invite
+      # links point at the wrong host. Empty = the app's localhost:8080 default.
+      GIFTY_PUBLIC_ORIGIN: ${GIFTY_PUBLIC_ORIGIN:-}
     depends_on:
       postgres:
         condition: service_healthy
