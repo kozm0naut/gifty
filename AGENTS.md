@@ -5,6 +5,9 @@ When starting a new session or if you are a fresh agent, please review the follo
 - `.agents/`: Contains ongoing memory, project state, and context for agents.
 - `specs/`: Contains the formal specifications, plans, and tasks for the features being implemented.
 
+### Terminal (PowerShell 5.1) — avoid quote/escape mangling
+The command layer here (PowerShell 5.1 + an AI wrapper) strips or re-interprets a range of tokens before a command actually runs, so a command that looks right often executes wrong. The usual suspects are **inline double quotes, `$var` / `${VAR}` expansions, backticks (the PS escape char), braces `{...}`, and unquoted parentheses** — any of which can vanish, get split, or be interpolated (e.g. `docker exec ... sh -c 'echo ${FOO:-x}'` printing empty even when `FOO` is set). **Remedy:** wrap literal text in **single quotes** and avoid inline interpolation entirely; put multi-line or structured payloads (JSON bodies, SQL) in a **file** and pass them by path (`-d @file`, `Get-Content file | docker exec -i ...`); encode a tricky payload to **base64** (`[A-Za-z0-9+/=]` has no quotes, braces, `$`, or backticks, so it survives intact) and decode on the remote end (`<b64> | base64 -d | bash`); and when you need to *read* state, trust a tool that doesn't re-interpolate (`printenv`, `git rev-parse HEAD`, `curl` output) rather than `echo` or shell error text.
+
 ### How to run the app (Docker)
 The app ships as a single container (SPA + API) on one URL. From the repo root:
 
