@@ -21,8 +21,9 @@
 #   EMAIL_ENABLED      default: false  (accounts auto-confirm; no live email)
 #   RESEND_API_KEY     live email (requires EMAIL_ENABLED=true)
 #   RESEND_FROM        live email sender address
+#   APP_PORT           host port the app is published on (default: 80)
 #   APP_HOME           default: $HOME/gifty
-#   HEALTH_URL         default: http://localhost:8080/healthz
+#   HEALTH_URL         default: http://localhost:80/healthz
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -33,8 +34,11 @@ set -euo pipefail
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 
 EMAIL_ENABLED="${EMAIL_ENABLED:-true}"
+# Host port the app is published on (default 80). Both the .env PORT and the
+# health-check URL derive from this so they cannot drift apart.
+APP_PORT="${APP_PORT:-80}"
 APP_HOME="${APP_HOME:-$HOME/gifty}"
-HEALTH_URL="${HEALTH_URL:-http://localhost:8080/healthz}"
+HEALTH_URL="${HEALTH_URL:-http://localhost:${APP_PORT}/healthz}"
 
 echo "==> Gifty server deploy"
 echo "    image   = $IMAGE_REF"
@@ -61,7 +65,7 @@ fi
 cat > "$APP_HOME/.env" <<EOF
 # Gifty server environment — managed by GitHub Actions (do not edit by hand)
 NODE_ENV=production
-PORT=8080
+PORT=${APP_PORT}
 JWT_SECRET=${JWT_SECRET}
 POSTGRES_PASSWORD=${PGPW}
 EMAIL_ENABLED=${EMAIL_ENABLED}
