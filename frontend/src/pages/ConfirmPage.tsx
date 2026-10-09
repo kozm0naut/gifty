@@ -20,25 +20,20 @@ import { BrandMark } from '../components/BrandMark';
  *                              sign-in prompt (resend needs a session).
  */
 
-type ConfirmState = 'loading' | 'unconfirmed' | 'no-session';
-
 export function ConfirmPage() {
   const { isAuthenticated, isInitializing, isVerified, resendConfirmation, refreshAccount } =
     useAuth();
-  const [state, setState] = useState<ConfirmState>('loading');
   const [resendMsg, setResendMsg] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const email = useAuth().user?.email;
   const navigate = useNavigate();
 
-  // Derive the display state from the live auth context whenever it settles.
-  useEffect(() => {
-    if (isInitializing) return;
-    if (isVerified) return; // → success card below
-    if (isAuthenticated) setState('unconfirmed');
-    else setState('no-session');
-  }, [isInitializing, isVerified, isAuthenticated]);
+  // Success requires BOTH a live session AND a confirmed account. `isVerified`
+  // alone is true whenever the user is null (no session), which would wrongly
+  // flash "You're confirmed!" to a logged-out / cold visitor before bouncing
+  // them to /auth. Gating on `isAuthenticated` fixes that.
+  const showSuccess = isAuthenticated && isVerified;
 
   // After the /confirm link has been consumed (the page is loaded via the SPA
   // hand-off), the account may already be confirmed — re-check so a fresh
@@ -50,13 +45,13 @@ export function ConfirmPage() {
     check();
   }, [check]);
 
-  // Once the account is verified, show the success message, then land in the
-  // app. The timer is cancelled if the user navigates away earlier.
+  // Once confirmed with a live session, show the success message, then land in
+  // the app. The timer is cancelled if the user navigates away earlier.
   useEffect(() => {
-    if (!isVerified) return;
+    if (!showSuccess) return;
     const t = window.setTimeout(() => navigate('/', { replace: true }), 3000);
     return () => window.clearTimeout(t);
-  }, [isVerified, navigate]);
+  }, [showSuccess, navigate]);
 
   const handleResend = async () => {
     setBusy(true);
@@ -84,9 +79,9 @@ export function ConfirmPage() {
     );
   }
 
-  if (isVerified) {
-    // Email confirmed — the gate is lifted. Show a brief success confirmation,
-    // then land in the app (the auto-redirect timer above handles that).
+  if (showSuccess) {
+    // Confirmed + live session — the gate is lifted. Show a brief success
+    // confirmation, then land in the app (the auto-redirect timer handles it).
     return (
       <div className="confirm-page confirm-page--center">
         <div className="confirm-card">
@@ -107,8 +102,9 @@ export function ConfirmPage() {
     );
   }
 
-  // No live session (cold visit to a dead/expired link in a fresh browser).
-  if (state === 'no-session') {
+  // No live session (cold visit to a confirmation link in a fresh browser).
+  // Without a session we can't confirm or resend, so point them at sign-in.
+  if (!isAuthenticated) {
     return (
       <div className="confirm-page confirm-page--center">
         <div className="confirm-card">

@@ -203,12 +203,18 @@ describe('App login flow', () => {
     });
 
     const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement;
-    const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
+    const passwordInput = container.querySelector('#auth-password') as HTMLInputElement;
+    // The register form requires the confirm field to match before the server
+    // is called; fill it with the same weak value so the client-side
+    // "Passwords do not match" guard passes and the server's policy 400
+    // surfaces (the assertion target).
+    const confirmInput = container.querySelector('#auth-password-confirm') as HTMLInputElement;
     const nameInput = container.querySelector('#auth-name') as HTMLInputElement;
     const form = container.querySelector('form') as HTMLFormElement;
 
     fireEvent.change(emailInput, { target: { value: 'weak@example.com' } });
     fireEvent.change(passwordInput, { target: { value: 'short' } });
+    fireEvent.change(confirmInput, { target: { value: 'short' } });
     fireEvent.change(nameInput, { target: { value: 'Weak User' } });
 
     await act(async () => {
@@ -216,5 +222,66 @@ describe('App login flow', () => {
     });
 
     expect(container.textContent).toContain(POLICY_MESSAGE);
+  });
+});
+
+describe('ConfirmPage', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+  });
+
+  // Render the App at /confirm with /account resolving to `account`.
+  const renderConfirm = async (account: () => Response) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/account')) return account();
+        if (url.includes('/auth/refresh')) {
+          return { ok: false, status: 401, json: async () => ({ error: 'Authentication required' }) } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      }),
+    );
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/confirm']}>
+          <App />
+        </MemoryRouter>,
+      );
+    });
+    return container;
+  };
+
+  it('does not flash "You are confirmed" to a logged-out visitor', async () => {
+    const container = await renderConfirm(() =>
+      ({ ok: false, status: 401, json: async () => ({ error: 'Authentication required' }) } as Response),
+    );
+    // Without a session the success card must NOT appear (the old bug).
+    expect(container.querySelector('[data-testid="confirm-success"]')).toBeNull();
+    expect(container.textContent).not.toContain("You're confirmed!");
+    // Instead the visitor is told to sign in.
+    expect(container.textContent).toContain('Sign in to your account');
+  });
+
+  it('shows the resend card for a signed-in but unconfirmed account', async () => {
+    const container = await renderConfirm(() =>
+      ({ ok: true, json: async () => ({ user: { id: 'u1', email: 'a@b.com', displayName: 'A', verified: false } }) } as Response),
+    );
+    expect(container.querySelector('[data-testid="confirm-success"]')).toBeNull();
+    expect(container.textContent).toContain('A link is on its way');
+  });
+
+  it('shows the success card only for a signed-in, confirmed account', async () => {
+    const container = await renderConfirm(() =>
+      ({ ok: true, json: async () => ({ user: { id: 'u1', email: 'a@b.com', displayName: 'A', verified: true } }) } as Response),
+    );
+    expect(container.querySelector('[data-testid="confirm-success"]')).not.toBeNull();
+    expect(container.textContent).toContain("You're confirmed!");
   });
 });
