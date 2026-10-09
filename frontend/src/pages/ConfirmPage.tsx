@@ -122,8 +122,9 @@ export function ConfirmPage() {
             <Link to="/auth" className="confirm-link">
               Sign in to your account
             </Link>{' '}
-            to continue — if the link you opened just confirmed your email, you're
-            ready to go; if it was stale, resend a fresh one.
+            to continue. If the confirmation link you used is
+            valid, your email address will be confirmed. If not,
+            you can request a new confirmation link after signing in.
           </p>
         </div>
       </div>
