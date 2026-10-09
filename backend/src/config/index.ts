@@ -85,8 +85,13 @@ export interface CookieConfig {
   accessName: string;
   /** Refresh credential cookie name (contracts/api.md). */
   refreshName: string;
-  /** Set `Secure` only in production (local dev over http://localhost omits it — Assumptions). */
-  secure: boolean;
+  /**
+   * The `Secure` attribute is NOT stored here — it is derived per-request from
+   * `req.secure` (actual transport, honoring `trust proxy`) in the auth router.
+   * Hard-coding it from NODE_ENV would emit `Secure` cookies over plain HTTP on
+   * a non-localhost origin (e.g. http://<ip>:8080), which browsers reject and
+   * would silently break the session.
+   */
 }
 
 export type EmailMode = 'live' | 'capture' | 'disabled';
@@ -224,7 +229,6 @@ export function loadConfig(): Config {
     cookies: {
       accessName: 'gifty_access',
       refreshName: 'gifty_refresh',
-      secure: isProduction,
     },
     email,
     corsOrigins,

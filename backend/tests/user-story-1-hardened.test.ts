@@ -144,3 +144,36 @@ describe('US1 hardened sign-in flow (T012, 003 FR-020)', () => {
     expect(await prisma.user.count({ where: { email } })).toBe(1);
   });
 });
+
+describe('session cookie Secure flag follows the transport (003 US4, req.secure-derived)', () => {
+  it('does NOT set Secure over a plain http request (a browser would reject it)', async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post('/auth/register')
+      .send({ email: uniqueEmail('secure-off'), password: 'Password123!', displayName: 'S' });
+    expect(res.status).toBe(201);
+    const access = parseSetCookies(res).find((c) => c.startsWith('gifty_access='));
+    expect(access).toBeTruthy();
+    // A non-https, non-localhost origin is not "potentially trustworthy", so a Secure
+    // cookie would be dropped by the browser and the session lost. The flag must follow
+    // the transport (req.secure), not NODE_ENV.
+    expect(/(^|;\s*)secure\b/i.test(access)).toBe(false);
+  });
+
+  it('DOES set Secure when the request arrives as https (behind a trusted proxy)', async () => {
+    process.env.TRUST_PROXY = '1';
+    try {
+      const app = await createApp();
+      const res = await request(app)
+        .post('/auth/register')
+        .set('X-Forwarded-Proto', 'https')
+        .send({ email: uniqueEmail('secure-on'), password: 'Password123!', displayName: 'S' });
+      expect(res.status).toBe(201);
+      const access = parseSetCookies(res).find((c) => c.startsWith('gifty_access='));
+      expect(access).toBeTruthy();
+      expect(/(^|;\s*)secure\b/i.test(access)).toBe(true);
+    } finally {
+      delete process.env.TRUST_PROXY;
+    }
+  });
+});

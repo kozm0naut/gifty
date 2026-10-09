@@ -27,14 +27,21 @@ import { buildConfirmationLink } from '../email/links.js';
 
 /**
  * Serialize a Set-Cookie header per the feature 003 contract:
- *   gifty_access  — HttpOnly; Secure (production); SameSite=Lax; Path=/
- *   gifty_refresh — HttpOnly; Secure (production); SameSite=Lax; Path=/auth/refresh
+ *   gifty_access  — HttpOnly; Secure (when the request is secure); SameSite=Lax; Path=/
+ *   gifty_refresh — HttpOnly; Secure (when the request is secure); SameSite=Lax; Path=/auth/refresh
+ *
+ * The `Secure` flag follows the ACTUAL transport (`req.secure`), not a global
+ * NODE_ENV flag: a `Secure` cookie set over a non-secure, non-localhost origin
+ * (e.g. http://<ip>:8080) is rejected by browsers and would silently break the
+ * session. `req.secure` honors `trust proxy`/`x-forwarded-proto`, so it is
+ * correct for direct HTTP, direct HTTPS, and behind an HTTPS reverse proxy.
  */
 function serializeCookie(
   name: string,
   value: string,
   path: string,
   maxAgeSeconds?: number,
+  secure = false,
 ): string {
   const { cookies } = loadConfig();
   const attrs: Record<string, string | boolean | number> = {
@@ -42,17 +49,17 @@ function serializeCookie(
     httpOnly: true,
     sameSite: 'lax',
   };
-  if (cookies.secure) attrs.secure = true;
+  if (secure) attrs.secure = true;
   if (maxAgeSeconds !== undefined) attrs.maxAge = maxAgeSeconds;
   return stringifySetCookie({ name, value, ...attrs });
 }
 
-export function clearAccessCookie(): string {
-  return serializeCookie(loadConfig().cookies.accessName, '', '/', 0);
+export function clearAccessCookie(secure = false): string {
+  return serializeCookie(loadConfig().cookies.accessName, '', '/', 0, secure);
 }
 
-export function clearRefreshCookie(): string {
-  return serializeCookie(loadConfig().cookies.refreshName, '', '/auth/refresh', 0);
+export function clearRefreshCookie(secure = false): string {
+  return serializeCookie(loadConfig().cookies.refreshName, '', '/auth/refresh', 0, secure);
 }
 
 /**
@@ -72,11 +79,11 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 /** Issue the HttpOnly cookie pair for a live session (T017). */
-function setSessionCookies(res: Response, accessToken: string, refreshToken: string): void {
+function setSessionCookies(res: Response, accessToken: string, refreshToken: string, secure = false): void {
   const { cookies } = loadConfig();
   res.set('Set-Cookie', [
-    serializeCookie(cookies.accessName, accessToken, '/'),
-    serializeCookie(cookies.refreshName, refreshToken, '/auth/refresh'),
+    serializeCookie(cookies.accessName, accessToken, '/', undefined, secure),
+    serializeCookie(cookies.refreshName, refreshToken, '/auth/refresh', undefined, secure),
   ]);
 }
 
@@ -263,7 +270,7 @@ export function createAuthRouter() {
         ip,
         targetType: 'auth',
       });
-      setSessionCookies(res, accessToken, refreshToken);
+      setSessionCookies(res, accessToken, refreshToken, req.secure);
 
       return res.status(201).json({
         user: {
@@ -337,7 +344,7 @@ export function createAuthRouter() {
         ip,
         targetType: 'auth',
       });
-      setSessionCookies(res, accessToken, refreshToken);
+      setSessionCookies(res, accessToken, refreshToken, req.secure);
 
       return res.status(200).json({
         user: {
@@ -380,7 +387,7 @@ export function createAuthRouter() {
           detail: { reason: result.reason },
         });
 
-        res.set('Set-Cookie', [clearAccessCookie(), clearRefreshCookie()]);
+        res.set('Set-Cookie', [clearAccessCookie(req.secure), clearRefreshCookie(req.secure)]);
         res.status(401).json({
           error: 'Session is no longer active.',
           reason: result.reason,
@@ -396,8 +403,8 @@ export function createAuthRouter() {
       );
 
       res.set('Set-Cookie', [
-        serializeCookie(loadConfig().cookies.accessName, accessToken, '/'),
-        serializeCookie(loadConfig().cookies.refreshName, newRefreshToken, '/auth/refresh'),
+        serializeCookie(loadConfig().cookies.accessName, accessToken, '/', undefined, req.secure),
+        serializeCookie(loadConfig().cookies.refreshName, newRefreshToken, '/auth/refresh', undefined, req.secure),
       ]);
       res.status(200).json({ user });
     } catch (error) {
@@ -510,7 +517,7 @@ export function createAuthRouter() {
       const resolved = await resolveSessionForAccess(accessToken);
 
       if (!resolved) {
-        res.set('Set-Cookie', [clearAccessCookie(), clearRefreshCookie()]);
+        res.set('Set-Cookie', [clearAccessCookie(req.secure), clearRefreshCookie(req.secure)]);
         res.status(401).json({ error: 'Session is no longer active.' });
         return;
       }
@@ -525,7 +532,7 @@ export function createAuthRouter() {
         ip: (req.socket.remoteAddress ?? null) as string | null,
       });
 
-      res.set('Set-Cookie', [clearAccessCookie(), clearRefreshCookie()]);
+      res.set('Set-Cookie', [clearAccessCookie(req.secure), clearRefreshCookie(req.secure)]);
       res.status(204).end();
     } catch (error) {
       next(error);
