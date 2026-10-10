@@ -747,12 +747,10 @@ h1 {
 
 /* ---- Card ---- */
 .card {
-  background: var(--color-surface);
+  background: rgba(255, 255, 255, 0.07);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
 .card-pad {
@@ -795,9 +793,55 @@ h1 {
   /* fast hover-in; base rule's slower timing governs the hover-out */
   transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
   box-shadow: var(--shadow-md), 0 0 0 1px rgba(168, 85, 247, 0.25);
-  border-color: rgba(168, 85, 247, 0.4);
-  background: var(--color-surface-2);
+  border-style: outset;
+  border-color: var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.1);
   transform: translateY(-2px);
+}
+
+/* ---- List view entry: staggered rise + de-blur, accent bar grows in ---- */
+@keyframes list-card-enter {
+  from {
+    opacity: 0;
+    transform: translateX(64px) scale(0.985);
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes list-accent-grow {
+  from { filter: brightness(0.25); }
+  to { filter: brightness(1); }
+}
+
+.list-card {
+  animation: list-card-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.list-card::before {
+  animation: list-accent-grow 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.40s backwards;
+}
+
+/* stagger: 100ms apart, capped so long lists don't take forever */
+.list-card:nth-child(1) { animation-delay: 0.10s; }
+.list-card:nth-child(2) { animation-delay: 0.20s; }
+.list-card:nth-child(3) { animation-delay: 0.30s; }
+.list-card:nth-child(4) { animation-delay: 0.40s; }
+.list-card:nth-child(5) { animation-delay: 0.50s; }
+.list-card:nth-child(6) { animation-delay: 0.60s; }
+.list-card:nth-child(7) { animation-delay: 0.70s; }
+.list-card:nth-child(8) { animation-delay: 0.80s; }
+.list-card:nth-child(n + 9) { animation-delay: 0.90s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .list-card,
+  .list-card::before {
+    animation: none;
+  }
 }
 
 /* ---- Section title ---- */
@@ -1366,6 +1410,8 @@ h1 {
 .auth-card {
   max-width: 400px;
   margin: 0 auto;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .auth-card-title {
