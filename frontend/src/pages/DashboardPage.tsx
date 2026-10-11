@@ -173,7 +173,7 @@ export function Dashboard() {
         </button>
       </div>
 
-      <section className="section-gap">
+      <div className="flex-col col-gap-1 dashboard-lists">
         <h2 className="section-title"><BrandMark /> My Lists</h2>
         {loading ? (
           <div className="muted loading-row">Loading lists…</div>
@@ -185,20 +185,16 @@ export function Dashboard() {
             </button>
           </div>
         ) : (
-          <div className="flex-col col-gap-1">
-            {myLists.map((list) => renderListCard(list, true))}
-          </div>
+          myLists.map((list) => renderListCard(list, true))
         )}
-      </section>
 
-      {sharedLists.length > 0 && (
-        <section>
-          <h2 className="section-title"><BrandMark /> Shared with me</h2>
-          <div className="flex-col col-gap-1">
+        {sharedLists.length > 0 && (
+          <>
+            <h2 className="section-title"><BrandMark /> Shared with me</h2>
             {sharedLists.map((list) => renderListCard(list, false))}
-          </div>
-        </section>
-      )}
+          </>
+        )}
+      </div>
 
       {showNewList && (
         <Modal title="Create New List" onClose={() => setShowNewList(false)}>

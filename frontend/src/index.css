@@ -18,7 +18,7 @@
   --color-accent: #a855f7;
   --color-accent-2: #d946ef;
   --color-accent-hover: #c084fc;
-  --color-accent-soft: rgba(168, 85, 247, 0.16);
+  --color-accent-soft: rgba(168, 85, 247, 0.3);
   --color-accent-glow: rgba(168, 85, 247, 0.45);
   --color-accent-gradient: linear-gradient(135deg, #a855f7 0%, #d946ef 100%);
 
@@ -515,7 +515,7 @@ h1 {
   flex-shrink: 0;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-surface-2);
   color: var(--color-muted);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
@@ -524,7 +524,7 @@ h1 {
 
 .icon-btn:hover {
   color: var(--color-text);
-  background: var(--color-surface-2);
+  background: var(--color-surface-3);
   border-color: var(--color-border-strong);
   transform: translateY(-1px);
 }
@@ -574,7 +574,7 @@ h1 {
   outline: none;
   border-color: var(--color-accent);
   background: rgba(0, 0, 0, 0.32);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
+  box-shadow: 0 0 0 3px rgb(168 85 247 / 16%);
 }
 
 .textarea {
@@ -830,14 +830,14 @@ h1 {
 }
 
 /* stagger: 100ms apart, capped so long lists don't take forever */
-.list-card:nth-child(2) { animation-delay: 0.15s; }
-.list-card:nth-child(3) { animation-delay: 0.30s; }
-.list-card:nth-child(4) { animation-delay: 0.45s; }
-.list-card:nth-child(5) { animation-delay: 0.60s; }
-.list-card:nth-child(6) { animation-delay: 0.75s; }
-.list-card:nth-child(7) { animation-delay: 0.90s; }
-.list-card:nth-child(8) { animation-delay: 1.05s; }
-.list-card:nth-child(n + 9) { animation-delay: 1.20s; }
+.list-card:nth-of-type(2) { animation-delay: 0.15s; }
+.list-card:nth-of-type(3) { animation-delay: 0.30s; }
+.list-card:nth-of-type(4) { animation-delay: 0.45s; }
+.list-card:nth-of-type(5) { animation-delay: 0.60s; }
+.list-card:nth-of-type(6) { animation-delay: 0.75s; }
+.list-card:nth-of-type(7) { animation-delay: 0.90s; }
+.list-card:nth-of-type(8) { animation-delay: 1.05s; }
+.list-card:nth-of-type(n + 9) { animation-delay: 1.20s; }
 
 @media (prefers-reduced-motion: reduce) {
   .list-card,
@@ -864,6 +864,17 @@ h1 {
   height: 1.05em;
   flex-shrink: 0;
   filter: drop-shadow(0 0 4px var(--color-accent-glow));
+}
+
+/* Dashboard: headings sit inside a flex column (gap = 1rem). Zero the
+   heading's own bottom margin so heading→card is just the 16px gap, and give a
+   heading that directly follows a card an extra top margin so the card→heading
+   break stays 32px — matching the old sectioned layout's spacing. */
+.dashboard-lists .section-title {
+  margin-bottom: 0;
+}
+.dashboard-lists .list-card + .section-title {
+  margin-top: 1rem;
 }
 
 /* ---- Badges ---- */
