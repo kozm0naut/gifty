@@ -7,6 +7,7 @@ import { ListPage } from './pages/ListPage';
 import { AccountPage } from './pages/AccountPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BrandMark } from './components/BrandMark';
+import { LoadingSpinner } from './components/LoadingSpinner';
 import { getInitials } from './utils/avatar';
 import { getNameColors } from './utils/colors';
 
@@ -160,7 +161,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // otherwise an authenticated user is bounced to /auth on first paint and
   // back again once the session resolves (the race the old comment warned about).
   if (isInitializing) {
-    return <div className="loading-row">Loading…</div>;
+    return <LoadingSpinner className="loading-spinner--full" />;
   }
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
@@ -176,7 +177,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isInitializing } = useAuth();
   if (isInitializing) {
-    return <div className="loading-row">Loading…</div>;
+    return <LoadingSpinner className="loading-spinner--full" />;
   }
   if (isAuthenticated) {
     return <Navigate to="/" replace />;

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
 import { NewListForm } from '../components/NewListForm';
 import { BrandMark } from '../components/BrandMark';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 import { getNameColors } from '../utils/colors';
 
 export function Dashboard() {
@@ -176,7 +177,7 @@ export function Dashboard() {
       <div className="flex-col col-gap-1 dashboard-lists">
         <h2 className="section-title"><BrandMark /> My Lists</h2>
         {loading ? (
-          <div className="muted loading-row">Loading lists…</div>
+          <LoadingSpinner className="loading-spinner--full" label="Loading lists" />
         ) : myLists.length === 0 ? (
           <div className="empty-state">
             <p>You haven't created any gift lists yet.</p>
