@@ -214,16 +214,22 @@ export async function login(payload: AuthPayload) {
 
 /**
  * Bootstrap the session from the HttpOnly `gifty_access` cookie (T027).
- * 200 → `{ user }`; 401 → no active session.
+ * 200 → `{ user }`; 401 → refresh-once + retry (T028), then no active session.
+ *
+ * The access token is short-lived (default 10 min), so a 401 on page load is
+ * usually just that TTL lapsing while the refresh cookie is still valid. A
+ * bare 401 used to mean "no active session" here, silently killing live
+ * sessions on any load >10 min after login — so this goes through the same
+ * single-flight refresh path as every other call.
  */
 export async function fetchAccount(): Promise<AccountUser> {
-  const response = await fetch(`${API_BASE_URL}/account`, {
-    credentials: 'include',
-  });
-  if (response.status === 401) {
-    throw new Error('no active session');
-  }
-  const data = await handleResponse<{ user: AccountUser }>(response);
+  const doFetch = () =>
+    fetch(`${API_BASE_URL}/account`, { credentials: 'include' });
+  const response = await doFetch();
+  const data = await handleResponse<{ user: AccountUser }>(
+    response,
+    response.status === 401 ? doFetch : undefined,
+  );
   if (!data?.user) {
     throw new Error('no active session');
   }

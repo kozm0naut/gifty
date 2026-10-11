@@ -135,9 +135,40 @@ describe('api.ts session handling (T028)', () => {
     expect(removeItemSpy).not.toHaveBeenCalled();
   });
 
-  it('fetchAccount: 401 → throws "no active session"', async () => {
+  it('fetchAccount: 401 with a failed refresh → dispatches the plain notice and throws the expired message', async () => {
+    const listener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+
     fetchMock.mockResolvedValue(jsonResponse(401, { error: 'Authentication required' }));
-    await expect(fetchAccount()).rejects.toThrow('no active session');
+
+    await expect(fetchAccount()).rejects.toThrow(SESSION_EXPIRED_MESSAGE);
+    expect((listener.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({
+      message: SESSION_EXPIRED_MESSAGE,
+    });
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
+  });
+
+  it('fetchAccount: lapsed access token (401) → refreshes once, retries, and resolves the user', async () => {
+    let accountCalls = 0;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/account')) {
+        accountCalls += 1;
+        if (accountCalls === 1) return jsonResponse(401, { error: 'Authentication required' });
+        return jsonResponse(200, { user: { id: 'u1', email: 'a@b.c', displayName: 'A' } });
+      }
+      if (url.includes('/auth/refresh')) {
+        return jsonResponse(200, { user: { id: 'u1' } });
+      }
+      return jsonResponse(200, {});
+    });
+
+    const user = await fetchAccount();
+
+    expect(user.id).toBe('u1');
+    expect(accountCalls).toBe(2); // original + exactly one retry
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.filter((u) => u.includes('/auth/refresh'))).toHaveLength(1);
   });
 
   it('logoutSession: 204 and 401 are both success; other statuses throw', async () => {
