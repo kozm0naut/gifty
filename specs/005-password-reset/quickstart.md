@@ -65,7 +65,7 @@ App: **http://localhost:8080**.
    → expect **400** with the uniform invalid-link body, and **no** password change
    (login with the new password still works; a *different* password was not set).
 4. Expiry: with a fresh account, issue a link, then present the token after its TTL
-   (for the test, set `EMAIL_TOKEN_TTL_HOURS` low or manipulate the row's
+   (for the test, set `RESET_TOKEN_TTL_HOURS` low or manipulate the row's
    `expiresAt`) → **400** uniform body.
 
 ## Scenario D — Session revocation (US2 scenario 5, FR-012)

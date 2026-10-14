@@ -32,7 +32,7 @@ Add an unauthenticated **forgot-password email flow**: a signed-out user request
 
 **Constraints**: Non-enumerable (uniform responses, timing equalization), raw token/password never stored or logged, rate-limited per source and per account, list/claim/purchase behavior untouched (FR-010)
 
-**Scale/Scope**: Two new unauthenticated endpoints + one new table + one outbox kind + 3 frontend pieces (link, form, page) + tests
+**Scale/Scope**: Two new unauthenticated endpoints + one new table + one outbox kind + 4 frontend pieces (forgot-password link, `ForgotPasswordPage`, `ResetPage`, api helpers) + tests
 
 ## Constitution Check
 
@@ -93,9 +93,10 @@ backend/
 frontend/
 ├── src/
 │   ├── pages/
-│   │   ├── AuthPage.tsx              # + "Forgot password?" link
+│   │   ├── AuthPage.tsx              # + "Forgot password?" link → /forgot-password
+│   │   ├── ForgotPasswordPage.tsx    # NEW: email form (POST /auth/reset-request)
 │   │   └── ResetPage.tsx             # NEW: set-new-password form (token from /reset/:token)
-│   ├── App.tsx                       # + /reset/:token public route
+│   ├── App.tsx                       # + /reset/:token + /forgot-password public routes
 │   └── services/api.ts               # + requestPasswordReset() / resetPassword()
 └── tests/e2e/password-reset.spec.ts  # full flow in capture mode
 ```

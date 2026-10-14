@@ -38,9 +38,8 @@ columns `id`, `userId`, `tokenHash` (SHA-256, unique), `createdAt`, `expiresAt`,
 
 **Decision**: 256-bit `crypto.randomBytes(32).toString('base64url')`; store only the
 SHA-256 hex digest (`tokenHash`, unique); single use via an atomic conditional
-`updateMany` (`where { tokenHash, consumedAt: null }`); TTL from
-`EMAIL_TOKEN_TTL_HOURS` (default 24 h) as a new `resetTokenTtlHours` config key with
-the same default.
+`updateMany` (`where { tokenHash, consumedAt: null, expiresAt: { gte: now } }`); TTL
+from `RESET_TOKEN_TTL_HOURS` (default 24 h) as a new `resetTokenTtlHours` config key.
 
 **Rationale**: FR-004/FR-005/FR-006 map 1:1 onto the proven 004 mechanics
 (256-bit entropy, non-reversible storage, atomic single-use consume, indistinguishable
@@ -140,8 +139,9 @@ precedent). Rejected.
 ## D7 — Atomic success semantics (FR-008/012/013)
 
 **Decision**: One Prisma transaction, in order:
-1. Claim token row (`updateMany where { id, tokenHash, consumedAt: null }` → set
-   `consumedAt`; `count === 0` ⇒ treat as invalid, no state change).
+1. Claim token row (`updateMany where { id, tokenHash, consumedAt: null,
+   expiresAt: { gte: now } }` → set `consumedAt`; `count === 0` ⇒ treat as invalid —
+   including an expired token — no state change).
 2. `bcrypt.hash(newPassword, 10)` → update `User.passwordHash`.
 3. If `verifiedAt` is null → set `verifiedAt = now` (FR-013; no-op when already set).
 4. Revoke **all** `UserSession` rows for the user (`updateMany where { userId,

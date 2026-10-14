@@ -31,11 +31,12 @@ model PasswordResetToken {
 - Raw token: `crypto.randomBytes(32).toString('base64url')` — 256 bits.
 - `expiresAt = createdAt + resetTokenTtlHours` (config; default 24 h).
 - Consume is the atomic
-  `updateMany({ where: { id, tokenHash, consumedAt: null }, data: { consumedAt } })`;
-  `count === 0` ⇒ invalid (unknown, expired-checked, or already consumed) with **no
+  `updateMany({ where: { id, tokenHash, consumedAt: null, expiresAt: { gte: now } }, data: { consumedAt } })`;
+  `count === 0` ⇒ invalid (unknown, already expired, or already consumed — the
+  `expiresAt` guard enforces the TTL in the query itself) with **no
   state change** (research D2/D7).
 
-**State transitions** (the spec's "issued / consumed / expired / superseded"
+**State transitions** (the spec's "issued / consumed / expired"
 lifecycle, expressed over the row):
 
 ```text
@@ -119,9 +120,9 @@ bcrypt hash (FR-006).
 2. **Raw token never persisted outside the outbox body** — `PasswordResetToken`
    stores only the digest; the outbox body is the single raw-token holder (same as
    004).
-4. **A completed reset ends all pending reset state** — after a successful reset,
+3. **A completed reset ends all pending reset state** — after a successful reset,
    no un-consumed `PasswordResetToken` rows remain for the account (sibling
    invalidation, FR-012 B+).
-3. **Reset is orthogonal to list state** — no relation exists between
+4. **Reset is orthogonal to list state** — no relation exists between
    `PasswordResetToken`/reset logic and `GiftList`/`GiftItem`/`SharePermission`
    (FR-010); the only shared entities are `User` and `UserSession`.
