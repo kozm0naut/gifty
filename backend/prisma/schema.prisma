@@ -39,6 +39,7 @@ enum NameDisclosureConsent {
 enum OutboxKind {
   invite
   confirmation
+  reset // NEW (005, research D3)
 }
 
 enum OutboxStatus {
@@ -64,6 +65,7 @@ model User {
   auditEvents        AuditEvent[]   @relation("Actor")
   ownedInvitations   PendingInvitation[]
   outboxMessages     OutboxMessage[]
+  passwordResetTokens PasswordResetToken[]
 
   // Email verification state (feature 004, D4/D5/D6). `verifiedAt === null`
   // is the unconfirmed state (no separate boolean). Only meaningful when email
@@ -245,4 +247,26 @@ model OutboxMessage {
   @@index([status, nextAttemptAt])
   @@index([userId])
   @@index([listId])
+}
+
+// ---------------------------------------------------------------------------
+// Password reset (feature 005) — spec: specs/005-password-reset/
+// ---------------------------------------------------------------------------
+
+/// Single-use, expiring password-reset token (005 FR-007, 005 FR-011). Only the
+/// SHA-256 digest is stored — the raw token never persists (005 D1). Atomic
+/// single-use consume is enforced via the `consumedAt` discriminator (005 D2);
+/// `expiresAt` bounds the token's lifetime (005 FR-007, default 24h).
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tokenHash])
+  @@index([userId, consumedAt])
 }

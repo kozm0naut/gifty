@@ -35,7 +35,13 @@ export type BudgetKind =
   // Feature 004 (US2, 004 FR-014): verification-email resends, keyed per-account
   // (userId) and counted on EVERY successful send (not just failures) so a
   // legitimate user is still capped at a few per window.
-  | 'resend-confirmation';
+  | 'resend-confirmation'
+  // Feature 005 (005 FR-007): password-reset requests, keyed per-source (client
+  // IP) and per-account (normalized email), and counted on EVERY request (not
+  // just failures) since each one may issue a link — the uniform response means
+  // there is no success/failure signal to key on.
+  | 'reset-source'
+  | 'reset-account';
 
 interface WindowCounter {
   /** Failures recorded in the current window. */
@@ -48,7 +54,7 @@ interface WindowCounter {
 const counters = new Map<string, WindowCounter>();
 
 function budgetFor(kind: BudgetKind): number {
-  const { rateLimit } = loadConfig();
+  const { rateLimit, reset } = loadConfig();
   switch (kind) {
     case 'login-source':
       return rateLimit.loginPerSource;
@@ -59,6 +65,12 @@ function budgetFor(kind: BudgetKind): number {
     // Feature 004 (US2): the per-account resend cap lives on the email config.
     case 'resend-confirmation':
       return loadConfig().email.resendMaxPerAccount;
+    // Feature 005 (005 FR-007): the per-source/per-account reset caps live on the
+    // reset config (the window itself is shared with the app-wide budget).
+    case 'reset-source':
+      return reset.maxPerSource;
+    case 'reset-account':
+      return reset.maxPerAccount;
   }
 }
 

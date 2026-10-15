@@ -33,6 +33,12 @@ export const AUDIT_ACTIONS = [
   'email_confirmation_queued',
   'email_delivered',
   'email_failed',
+  // Feature 005 (password reset, US1) — request, rate-limit, and consume
+  // outcomes (005 FR-009):
+  'password_reset_requested',
+  'password_reset_rate_limited',
+  'password_reset_success',
+  'password_reset_failed',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -23,7 +23,7 @@ import { loadConfig } from '../config/index.js';
 
 export interface OutboundMeta {
   /** The outbox message kind — surfaced by the capture stub for tests. */
-  kind?: 'invite' | 'confirmation';
+  kind?: 'invite' | 'confirmation' | 'reset';
   /** The link embedded in the body — surfaced by the capture stub for tests. */
   link?: string;
 }
@@ -102,7 +102,7 @@ export class ResendMailer implements Mailer {
 }
 
 export interface CapturedEmail {
-  kind?: 'invite' | 'confirmation';
+  kind?: 'invite' | 'confirmation' | 'reset';
   to: string;
   subject: string;
   text: string;

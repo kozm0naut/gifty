@@ -107,6 +107,42 @@ export async function enqueueConfirmation(
   return { outboxMessageId: row.id, inserted: true };
 }
 
+/**
+ * Enqueue a password-reset email (005 FR-002). `listId` is NULL (the unique
+ * constraint does not apply), so each request produces a new row.
+ *
+ * Re-issuing supersedes any prior queued/sending reset for the same user: the
+ * old token is already invalid (the new `PasswordResetToken` row overwrites
+ * the pending state for that account), so delivering that stale email would be
+ * misleading — mark it `superseded` (terminal) and skip.
+ */
+export async function enqueueReset(
+  tx: Prisma.TransactionClient,
+  input: { userId: string; recipientEmail: string; subject: string; bodyText: string; bodyHtml?: string },
+): Promise<EnqueueResult> {
+  await tx.outboxMessage.updateMany({
+    where: {
+      kind: 'reset',
+      userId: input.userId,
+      status: { in: ['queued', 'sending'] },
+    },
+    data: { status: 'superseded', supersededAt: new Date() },
+  });
+  const row = await tx.outboxMessage.create({
+    data: {
+      kind: 'reset',
+      userId: input.userId,
+      listId: null,
+      recipientEmail: input.recipientEmail,
+      subject: input.subject,
+      bodyText: input.bodyText,
+      bodyHtml: input.bodyHtml ?? null,
+    },
+    select: { id: true },
+  });
+  return { outboxMessageId: row.id, inserted: true };
+}
+
 /** Extract a stable, scrubbed error class from a mailer failure (never a key). */
 function scrubbedError(err: unknown): string {
   const providerError = (err as { providerError?: string })?.providerError;

@@ -105,14 +105,22 @@ describe('recordAuditEvent (T009)', () => {
     // `invitation_matched`. Both are security-relevant, so 003 FR-013 requires a
     // recordable audit action for each. Feature 004 (email integration) adds
     // four more (D7): `email_invite_queued`, `email_confirmation_queued`,
-    // `email_delivered`, `email_failed` — so the vocabulary is 19.
-    expect(AUDIT_ACTIONS).toHaveLength(19);
+    // `email_delivered`, `email_failed` — so the vocabulary is 19. Feature
+    // 005 (password reset, US1) adds four more (005 FR-009):
+    // `password_reset_requested`, `password_reset_rate_limited`,
+    // `password_reset_success`, `password_reset_failed` — so the vocabulary is
+    // 23.
+    expect(AUDIT_ACTIONS).toHaveLength(23);
     expect(AUDIT_ACTIONS).toContain('consent_updated');
     expect(AUDIT_ACTIONS).toContain('invitation_matched');
     expect(AUDIT_ACTIONS).toContain('email_invite_queued');
     expect(AUDIT_ACTIONS).toContain('email_confirmation_queued');
     expect(AUDIT_ACTIONS).toContain('email_delivered');
     expect(AUDIT_ACTIONS).toContain('email_failed');
+    expect(AUDIT_ACTIONS).toContain('password_reset_requested');
+    expect(AUDIT_ACTIONS).toContain('password_reset_rate_limited');
+    expect(AUDIT_ACTIONS).toContain('password_reset_success');
+    expect(AUDIT_ACTIONS).toContain('password_reset_failed');
     for (const action of AUDIT_ACTIONS) {
       (prisma.auditEvent.create as any).mockClear();
       await recordAuditEvent({ action, outcome: 'success' });

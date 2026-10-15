@@ -746,6 +746,30 @@ h1 {
   color: var(--color-muted);
 }
 
+/* ---- Inline accent link (form context: "Forgot password?", etc.) ---- */
+.link {
+  align-self: flex-start;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent-soft);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease, text-shadow 0.15s ease;
+}
+
+.link:hover {
+  color: var(--color-accent-hover);
+  text-decoration-color: var(--color-accent-hover);
+  text-shadow: 0 0 14px var(--color-accent-glow);
+}
+
+.link-right {
+  align-self: flex-end;
+}
+
 /* ---- Card ---- */
 .card {
   background: rgba(255, 255, 255, 0.07);

@@ -57,14 +57,21 @@ App: **http://localhost:8080**.
    difference (both perform one bcrypt compare). No outbox row exists for the
    unregistered email.
 
-## Scenario C — Single-use + expiry (SC-003, FR-004/005)
+## Scenario C — Single-use, sibling-invalidation + expiry (SC-003, FR-004/005, FR-012)
 
 1. From Scenario A step 3–4, take the link.
 2. Consume it once successfully (Scenario A step 5).
 3. **Replay** the same `POST /auth/reset` with the same token and any valid password
    → expect **400** with the uniform invalid-link body, and **no** password change
    (login with the new password still works; a *different* password was not set).
-4. Expiry: with a fresh account, issue a link, then present the token after its TTL
+4. **Sibling-invalidation (FR-012, D7 step 6)**: with a fresh account, request a
+   reset (link **A**), then — before using A — request a *second* reset (link **B**),
+   so both are pending. Consume **A** (successful reset). Then present **B** with any
+   valid password → expect **400** with the *same* uniform invalid-link body and **no**
+   password change: a pending link the user never acted on is invalidated the moment
+   any reset for that account succeeds, so it cannot overwrite a completed reset
+   (the old-link takeover hole CHK004/B+ closed).
+5. Expiry: with a fresh account, issue a link, then present the token after its TTL
    (for the test, set `RESET_TOKEN_TTL_HOURS` low or manipulate the row's
    `expiresAt`) → **400** uniform body.
 

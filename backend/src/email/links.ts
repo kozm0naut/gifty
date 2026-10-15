@@ -11,6 +11,7 @@
  *   - `buildConfirmationLink(token)` → `{origin}/confirm?token=<raw>` (D4)
  *   - `buildInviteLink()`            → `{origin}/`  (home page; no token, no
  *     deep link — 004 FR-013)
+ *   - `buildResetLink(token)`        → `{origin}/reset/<raw>` (005 FR-002)
  */
 
 import { loadConfig } from '../config/index.js';
@@ -31,4 +32,14 @@ export function buildConfirmationLink(token: string): string {
 /** The invite link: the app home page, `{origin}/` (no token, no deep link). */
 export function buildInviteLink(): string {
   return `${origin()}/`;
+}
+
+/**
+ * The single-use reset link: `{origin}/reset/<raw>` (005 FR-002). The token is
+ * opaque base64url (256-bit random) — URL-safe by construction — but encode
+ * defensively in case a future token format is not. It is a path segment (the
+ * frontend route is `/reset/:token`), not a query param.
+ */
+export function buildResetLink(token: string): string {
+  return `${origin()}/reset/${encodeURIComponent(token)}`;
 }
