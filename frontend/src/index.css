@@ -1849,10 +1849,10 @@ h1 {
   font-size: 0.9rem;
 }
 .confirm-msg--ok {
-  color: var(--success, #15803d);
+  color: var(--color-success);
 }
 .confirm-msg--err {
-  color: var(--danger, #b91c1c);
+  color: var(--color-danger);
 }
 .confirm-actions {
   margin-top: 0.25rem;
