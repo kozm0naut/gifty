@@ -11,7 +11,13 @@ import { Prisma } from '@prisma/client';
  *      claimant identity + timestamps cleared);
  *   3. delete the user's owned lists (items / shares / pending invitations
  *      cascade via FK `onDelete: Cascade`);
- *   4. delete the user's recipient-side `SharePermission` rows on others' lists;
+ *   4. REVERT the user's recipient-side `SharePermission` rows on others' lists
+ *      to pending invitations (upsert on the (giftListId, inviteeEmail) unique
+ *      key) — this conceals the deletion from the list owner (the owner sees
+ *      the same pending invite addressed to the same email, indistinguishable
+ *      from an unregistered invitee) and lets the user rejoin those lists upon
+ *      re-creating the account (registration matches the pending invitation
+ *      into a fresh SharePermission, auth/router.ts);
  *   5. discard the user's pending invitations as owner (FK cascade on ownerUserId
  *      also covers this, but we set them explicitly for clarity);
  *   6. record `account_removal` (inside the transaction, before the delete so
@@ -56,9 +62,45 @@ export async function removeAccount(userId: string, ip: string | null): Promise<
       where: { ownerUserId: userId },
     });
 
-    // (4) Delete the user's recipient-side permissions on OTHERS' lists.
-    //     (FK SharePermission.recipientUserId is RESTRICT, so this must happen
-    //     before the user row is deleted.)
+    // (4) Revert the user's recipient-side permissions on OTHERS' lists to
+    //     pending invitations, then delete the permission rows. Two goals:
+    //     (a) Concealment — the list owner's share view now shows the same
+    //         email as a pending invite, indistinguishable from an invitee
+    //         who never registered; nothing signals the account was deleted.
+    //     (b) Rejoin — if the account is re-created under the same email, the
+    //         registration flow (auth/router.ts) matches the pending
+    //         invitation back into a fresh SharePermission (invitation_matched).
+    //     Upsert on the (giftListId, inviteeEmail) unique key so both "no
+    //     invitation row" and "already matched/discarded" end as pending.
+    //     ownerUserId != userId: shares on the user's own lists already went
+    //     with the cascade in step (3), and those lists no longer exist.
+    //     (FK SharePermission.recipientUserId is RESTRICT, so the delete must
+    //     still happen before the user row is removed.)
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
+    const recipientShares = user
+      ? await tx.sharePermission.findMany({
+          where: { recipientUserId: userId, ownerUserId: { not: userId } },
+          select: { giftListId: true, ownerUserId: true },
+        })
+      : [];
+    if (user) {
+      await Promise.all(
+        recipientShares.map((share) =>
+          tx.pendingInvitation.upsert({
+            where: {
+              giftListId_inviteeEmail: { giftListId: share.giftListId, inviteeEmail: user.email! },
+            },
+            create: {
+              giftListId: share.giftListId,
+              inviteeEmail: user.email!,
+              ownerUserId: share.ownerUserId,
+            },
+            update: { status: 'pending' },
+          }),
+        ),
+      );
+    }
+
     await tx.sharePermission.deleteMany({
       where: { recipientUserId: userId },
     });
@@ -83,7 +125,10 @@ export async function removeAccount(userId: string, ip: string | null): Promise<
         targetId: userId,
         outcome: 'success',
         ip: ip ?? null,
-        detail: Prisma.JsonNull,
+        // Operator-facing context (audit is operator-only, so this does not
+        // leak to the list owner): how many recipient shares were reverted
+        // to pending invitations by step (4).
+        detail: recipientShares.length > 0 ? { revertedShares: recipientShares.length } : Prisma.JsonNull,
       },
     });
 

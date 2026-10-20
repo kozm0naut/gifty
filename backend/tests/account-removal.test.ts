@@ -13,7 +13,9 @@ import { createApp } from '../src/app.js';
  *   2. clear the user's claims on OTHERS' items (item reverts to `available`,
  *      claimant identity cleared; the rest of that list unchanged);
  *   3. delete the user's owned lists (items / shares / pending invitations cascade);
- *   4. delete the user's recipient-side `SharePermission` rows on others' lists;
+ *   4. REVERT the user's recipient-side `SharePermission` rows on others' lists
+ *      to pending invitations (conceals the deletion from the list owner and
+ *      lets the user rejoin on re-registration), then delete the rows;
  *   5. discard the user's pending invitations as owner;
  *   6. delete the user row;
  *   7. record `account_removal`; audit rows survive with `actorUserId` nulled.
@@ -169,6 +171,28 @@ describe('account removal cascade (T045, 003 FR-014, 003 FR-028)', () => {
       await prisma.sharePermission.findMany({ where: { recipientUserId: recipient.id } }),
     ).toHaveLength(0);
 
+    // …but it has been REVERTED to a pending invitation on the same list,
+    // addressed to the same email (rejoin affordance).
+    const invitation = await prisma.pendingInvitation.findUnique({
+      where: { giftListId_inviteeEmail: { giftListId: listId, inviteeEmail: recipient.email } },
+    });
+    expect(invitation).toBeTruthy();
+    expect(invitation!.status).toBe('pending');
+    expect(invitation!.ownerUserId).toBe(owner.id);
+
+    // …and in the owner's uniform share view it is indistinguishable from an
+    // ordinary pending invite (concealment: email visible, no display name,
+    // no registered/unregistered fingerprint).
+    const view = await request(app)
+      .get(`/lists/${listId}/share-permissions`)
+      .set('Cookie', `gifty_access=${owner.access}`);
+    expect(view.status).toBe(200);
+    const entries = view.body.permissions as any[];
+    const recipEntry = entries.find((e) => e.recipientEmail === recipient.email);
+    expect(recipEntry).toBeTruthy();
+    expect(recipEntry.recipientDisplayName ?? null).toBeNull();
+    expect(recipEntry.permission).toBe('shared');
+
     // …and the other recipient still has access with the same visibility rules
     // (nothing newly revealed: they see the claimant as placeholder, as before).
     const otherLists = await request(app).get('/lists').set('Cookie', `gifty_access=${other.access}`);
@@ -213,6 +237,64 @@ describe('account removal cascade (T045, 003 FR-014, 003 FR-028)', () => {
     expect(
       await prisma.sharePermission.findMany({ where: { recipientUserId: reg.body.user.id } }),
     ).toHaveLength(0);
+  });
+
+  it('rejoin: re-registering the same email re-matches the reverted pending invitation into a fresh share (US7 rejoin goal)', async () => {
+    const app = await createApp();
+    const owner = await register(app, 'owner', 'Owner');
+    const listId = await createList(app, owner, 'Owner List');
+
+    // Recipient (specific email) is shared onto the list, then deletes.
+    const email = uniqueEmail('rejoin');
+    const recipReg = await request(app)
+      .post('/auth/register')
+      .send({ email, password: 'Password123!', displayName: 'Old Recipient' });
+    expect(recipReg.status).toBe(201);
+    const recip: User = {
+      id: recipReg.body.user.id,
+      access: accessCookie(recipReg.headers['set-cookie']),
+      email,
+    };
+    await shareList(app, owner, listId, recip);
+    const del = await request(app)
+      .delete('/account')
+      .set('Cookie', `gifty_access=${recip.access}`);
+    expect(del.status).toBe(204);
+
+    // A NEW account with the SAME email is created.
+    const newReg = await request(app)
+      .post('/auth/register')
+      .send({ email, password: 'Password123!', displayName: 'New Recipient' });
+    expect(newReg.status).toBe(201);
+    const newUserId = newReg.body.user.id as string;
+
+    // Registration auto-matched the pending invitation into a fresh share:
+    // the new user holds a SharePermission on the list (consent pending), and
+    // the invitation is now `matched`.
+    const share = await prisma.sharePermission.findUnique({
+      where: { giftListId_recipientUserId: { giftListId: listId, recipientUserId: newUserId } },
+    });
+    expect(share).toBeTruthy();
+    expect(share!.nameDisclosureConsent).toBe('pending');
+    expect(share!.recipientEmail).toBe(email);
+    const invitation = await prisma.pendingInvitation.findUnique({
+      where: { giftListId_inviteeEmail: { giftListId: listId, inviteeEmail: email } },
+    });
+    expect(invitation!.status).toBe('matched');
+
+    // And the new account actually sees the list.
+    const lists = await request(app)
+      .get('/lists')
+      .set('Cookie', `gifty_access=${accessCookie(newReg.headers['set-cookie'])}`);
+    expect(lists.body.lists.some((l: any) => l.id === listId)).toBe(true);
+
+    // The owner's share view shows ONE entry for the email again (no duplicate
+    // ghost pending invite lingering).
+    const view = await request(app)
+      .get(`/lists/${listId}/share-permissions`)
+      .set('Cookie', `gifty_access=${owner.access}`);
+    const entries = view.body.permissions as any[];
+    expect(entries.filter((e) => e.recipientEmail === email)).toHaveLength(1);
   });
 
   it('audit history SURVIVES removal with actorUserId nulled (data-model.md; 003 FR-013)', async () => {
