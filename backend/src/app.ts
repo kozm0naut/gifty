@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createAuthRouter, clearAccessCookie, clearRefreshCookie } from './auth/router.js';
+import { createPasswordResetRouter } from './auth/password-reset.js';
 import { createListRouter } from './gift-lists/router.js';
 import { createItemRouter } from './gift-items/router.js';
 import { requireAuth, requireConfirmed, type AuthenticatedRequest } from './auth/middleware.js';
@@ -129,6 +130,10 @@ export async function createApp(): Promise<Express> {
   }
 
   app.use('/auth', createAuthRouter());
+  // Feature 005 (US1, 005 FR-011): unauthenticated password-reset endpoints.
+  // Mounted on the same `/auth` prefix as the auth router (order is
+  // irrelevant — the route paths do not overlap).
+  app.use('/auth', createPasswordResetRouter());
   app.use('/lists', createListRouter());
   app.use('/', createItemRouter());
 

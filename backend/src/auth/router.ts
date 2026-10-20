@@ -61,7 +61,7 @@ export function clearRefreshCookie(): string {
  * is never a real credential; it exists so both sign-in failure paths perform
  * exactly one bcrypt.compare and thus land in the same timing class.
  */
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
+export const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
   'gifty-timing-equalizer-not-a-real-password',
   10,
 );
@@ -72,7 +72,7 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 /** Issue the HttpOnly cookie pair for a live session (T017). */
-function setSessionCookies(res: Response, accessToken: string, refreshToken: string): void {
+export function setSessionCookies(res: Response, accessToken: string, refreshToken: string): void {
   const { cookies } = loadConfig();
   res.set('Set-Cookie', [
     serializeCookie(cookies.accessName, accessToken, '/'),

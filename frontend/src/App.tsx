@@ -2,6 +2,8 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-r
 import { useEffect, useRef, useState } from 'react';
 import { AuthPage } from './pages/AuthPage';
 import { ConfirmPage } from './pages/ConfirmPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPage } from './pages/ResetPage';
 import { Dashboard } from './pages/DashboardPage';
 import { ListPage } from './pages/ListPage';
 import { AccountPage } from './pages/AccountPage';
@@ -23,7 +25,13 @@ function AppContent() {
   const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isAuthRoute = location.pathname === '/auth';
+  // The public auth-style pages render their own glass card, so they use the
+  // transparent (bare) main wrapper to avoid glass-on-glass.
+  const isBareRoute =
+    location.pathname === '/auth' ||
+    location.pathname === '/confirm' ||
+    location.pathname === '/forgot-password' ||
+    location.pathname.startsWith('/reset');
   const [currentUserName, setCurrentUserName] = useState(user?.displayName || 'User');
 
   useEffect(() => {
@@ -132,13 +140,18 @@ function AppContent() {
         )}
       </header>
 
-      <main className={isAuthRoute ? 'app-main app-main--bare' : 'app-main'}>
+      <main className={isBareRoute ? 'app-main app-main--bare' : 'app-main'}>
         <Routes>
           <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
           {/* US2: the confirmation page handles its own auth state — it renders
               for both an unconfirmed-with-session and a no-session (cold link)
               visitor, and redirects to the dashboard once verified. */}
           <Route path="/confirm" element={<ConfirmPage />} />
+          {/* US1: public password-reset flow — bare routes, same treatment as
+              /confirm (no session guard): the reset link must work for a
+              locked-out visitor with no active session (005 FR-011). */}
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset/:token" element={<ResetPage />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           {/* The account area lives at /me — /account is taken by the API
               session-bootstrap endpoint (GET /account), and Express serves

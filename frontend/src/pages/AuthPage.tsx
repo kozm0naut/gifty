@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthPayload, login, register } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { BrandMark } from '../components/BrandMark';
@@ -99,6 +99,11 @@ export function AuthPage() {
             required
             className="input"
           />
+          {mode === 'login' && (
+            <Link to="/forgot-password" className="link link-right">
+              Forgot password?
+            </Link>
+          )}
         </div>
         {mode === 'register' && (
           <div className="field">

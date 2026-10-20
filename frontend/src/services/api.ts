@@ -213,6 +213,51 @@ export async function login(payload: AuthPayload) {
 }
 
 /**
+ * Request a password-reset email (feature 005, US1, 005 FR-001 / 005 FR-002).
+ * Unauthenticated, cookie-only, plain `fetch`. The endpoint ALWAYS returns the
+ * uniform `200` `U` body — it never distinguishes a registered vs unregistered
+ * email (non-enumeration oracle, 005 FR-002 / SC-002), so the caller surfaces
+ * the single "check your inbox" message either way. A `429` (rate-limited,
+ * 005 FR-007) is recoverable: we throw with the stable throttle copy and no
+ * specific wait time.
+ */
+export async function requestPasswordReset(email: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/auth/reset-request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email }),
+  });
+  if (response.status === 429) {
+    throw new Error('Too many recent requests, please try again later');
+  }
+  const data = await response.json().catch(() => ({}));
+  return data?.message || 'Please check your email for the password reset link';
+}
+
+/**
+ * Consume a reset link and set a new password (feature 005, US1, 005 FR-003).
+ * Unauthenticated, cookie-only, plain `fetch`. On `200 S` the server has set
+ * a fresh session (the HttpOnly cookies are stored automatically by the
+ * browser) and returns `{ status: 'reset', user: { …, verified: true } }`.
+ * A `400` (invalid link `I` or policy/mismatch `P`) throws with the server's
+ * stable `message`. Policy/mismatch rejections do NOT consume the token.
+ */
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+  confirmPassword: string,
+) {
+  const response = await fetch(`${API_BASE_URL}/auth/reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token, newPassword, confirmPassword }),
+  });
+  return handleAuthResponse<any>(response);
+}
+
+/**
  * Bootstrap the session from the HttpOnly `gifty_access` cookie (T027).
  * 200 → `{ user }`; 401 → refresh-once + retry (T028), then no active session.
  *

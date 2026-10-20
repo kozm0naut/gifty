@@ -73,6 +73,23 @@ export interface RateLimitConfig {
   loginPerAccount: number;
 }
 
+/**
+ * Password-reset operator settings (005). The per-source and per-account
+ * request budgets feed the rate-limit machinery (005 FR-007) and ride the
+ * existing sliding-window store — the window itself is the app-wide
+ * `rateLimit.windowMinutes` (`RATE_LIMIT_WINDOW_MINUTES`), so there is no
+ * separate reset-window knob. `tokenTtlHours` bounds how long an issued reset
+ * link stays valid (research D4 default: 24 h).
+ */
+export interface ResetConfig {
+  /** How long an issued reset link stays valid, in hours (default 24). */
+  tokenTtlHours: number;
+  /** Max reset requests per source (client IP) within the window (005 FR-007). */
+  maxPerSource: number;
+  /** Max reset requests per account (normalized email) within the window (005 FR-007). */
+  maxPerAccount: number;
+}
+
 export interface SessionConfig {
   /** Access-token lifetime in seconds. Spec default ≤ 1 h; implementation default 10 min (research D3). */
   accessTtlSeconds: number;
@@ -128,6 +145,8 @@ export interface EmailConfig {
 export interface Config {
   isProduction: boolean;
   rateLimit: RateLimitConfig;
+  /** Password-reset budgets + token TTL (005). Window reuses `rateLimit.windowMinutes`. */
+  reset: ResetConfig;
   session: SessionConfig;
   jwt: { secret: string | undefined; minLength: number };
   cookies: CookieConfig;
@@ -159,6 +178,14 @@ export function loadConfig(): Config {
     loginPerSource: toInt(process.env.LOGIN_MAX_FAILURES_PER_SOURCE, 10),
     registerPerSource: toInt(process.env.REGISTER_MAX_FAILURES_PER_SOURCE, 3),
     loginPerAccount: toInt(process.env.LOGIN_MAX_FAILURES_PER_ACCOUNT, 5),
+  };
+
+  // Password-reset (005). The window is intentionally NOT a separate knob: the
+  // reset budgets share the app-wide `rateLimit.windowMinutes` (research D4).
+  const reset: ResetConfig = {
+    tokenTtlHours: toInt(process.env.RESET_TOKEN_TTL_HOURS, 24),
+    maxPerSource: toInt(process.env.RESET_MAX_PER_SOURCE, 5),
+    maxPerAccount: toInt(process.env.RESET_MAX_PER_ACCOUNT, 5),
   };
 
   const session: SessionConfig = {
@@ -216,6 +243,7 @@ export function loadConfig(): Config {
   return {
     isProduction,
     rateLimit,
+    reset,
     session,
     jwt: {
       secret: process.env.JWT_SECRET,
