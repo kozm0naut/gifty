@@ -148,6 +148,23 @@ describe('api.ts session handling (T028)', () => {
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
   });
 
+  it('fetchAccount: 401 + refresh fails with no_session → plain throw, NO session-expired notice', async () => {
+    const listener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/auth/refresh')) {
+        return jsonResponse(401, { error: 'Session is no longer active.', reason: 'no_session' });
+      }
+      return jsonResponse(401, { error: 'Authentication required' });
+    });
+
+    await expect(fetchAccount()).rejects.toThrow('no active session');
+    expect(listener).not.toHaveBeenCalled(); // fresh visitor — the sign-in page stays quiet
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
+  });
+
   it('fetchAccount: lapsed access token (401) → refreshes once, retries, and resolves the user', async () => {
     let accountCalls = 0;
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {

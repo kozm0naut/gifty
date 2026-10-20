@@ -142,6 +142,13 @@ async function handleResponse<T>(response: Response, retry?: () => Promise<Respo
     } catch {
       /* no body — fall through to the plain notice */
     }
+    // `no_session`: no refresh cookie existed at all (fresh visitor
+    // bootstrapping `GET /account`) — "not signed in", NOT a session
+    // termination. Throwing plainly keeps the sign-in page quiet; the
+    // 003 FR-027 notice is reserved for real terminations.
+    if (reason === 'no_session') {
+      throw new Error('no active session');
+    }
     dispatchSessionExpired(
       reason === 'stale_refresh'
         ? { message: SESSION_SECURITY_MESSAGE, security: true }

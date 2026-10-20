@@ -361,7 +361,12 @@ export function createAuthRouter() {
       const refreshToken = cookies[loadConfig().cookies.refreshName];
 
       if (!refreshToken) {
-        res.status(401).json({ error: 'Session is no longer active.', reason: 'revoked' });
+        // No refresh cookie at all — the visitor was never signed in (e.g. a
+        // fresh browser bootstrapping `GET /account`). This is "not signed
+        // in", NOT a session termination: the client must not surface the
+        // 003 FR-027 "session expired" notice. Distinguished from a real
+        // revocation/expiry (which implies a session that used to exist).
+        res.status(401).json({ error: 'Session is no longer active.', reason: 'no_session' });
         return;
       }
 

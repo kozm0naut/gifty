@@ -106,6 +106,18 @@ describe('US1 hardened sign-in flow (T012, 003 FR-020)', () => {
     expect(res.body.token).toBeUndefined();
   });
 
+  it('refresh with NO refresh cookie → 401 reason no_session (not a session termination)', async () => {
+    const app = await createApp();
+
+    // A fresh visitor (no cookies at all) hitting /auth/refresh must be
+    // distinguishable from a real revocation/expiry: the client uses this to
+    // keep the sign-in page quiet instead of showing "session expired".
+    const res = await request(app).post('/auth/refresh');
+
+    expect(res.status).toBe(401);
+    expect(res.body.reason).toBe('no_session');
+  });
+
   it('no longer accepts the legacy Authorization: Bearer header (US4 bridge retired)', async () => {
     const app = await createApp();
     const email = uniqueEmail('bearer');
