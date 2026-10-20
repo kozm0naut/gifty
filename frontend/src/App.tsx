@@ -25,7 +25,13 @@ function AppContent() {
   const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isAuthRoute = location.pathname === '/auth';
+  // The public auth-style pages render their own glass card, so they use the
+  // transparent (bare) main wrapper to avoid glass-on-glass.
+  const isBareRoute =
+    location.pathname === '/auth' ||
+    location.pathname === '/confirm' ||
+    location.pathname === '/forgot-password' ||
+    location.pathname.startsWith('/reset');
   const [currentUserName, setCurrentUserName] = useState(user?.displayName || 'User');
 
   useEffect(() => {
@@ -134,7 +140,7 @@ function AppContent() {
         )}
       </header>
 
-      <main className={isAuthRoute ? 'app-main app-main--bare' : 'app-main'}>
+      <main className={isBareRoute ? 'app-main app-main--bare' : 'app-main'}>
         <Routes>
           <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
           {/* US2: the confirmation page handles its own auth state — it renders
