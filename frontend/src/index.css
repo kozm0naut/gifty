@@ -1732,13 +1732,32 @@ h1 {
 .account-field dt {
   min-width: 7rem;
   font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--color-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-faint);
 }
 
 .account-field dd {
   margin: 0;
+  font-size: 1.05rem;
   font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .account-field {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .account-field dt {
+    min-width: 0;
+  }
+
+  .account-field dd {
+    overflow-wrap: anywhere;
+  }
 }
 
 .account-danger {
