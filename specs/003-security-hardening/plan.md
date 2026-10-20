@@ -102,7 +102,7 @@ specs/003-security-hardening/
 │   │   ├── permissions/access.ts  # (logic unchanged; may gain a consent-aware helper for recipient decoration)
 │   │   ├── common/identity.ts     # EXTEND: resolve names only when nameDisclosureConsent = revealed (FR-024); owner email stripped (FR-025)
 │   │   └── account/
-│   │       └── removal.ts         # NEW: cascade — clear claims, delete owned lists, discard pending invitations, revoke sessions, audit (FR-014)
+│   │       └── removal.ts         # NEW: cascade — clear claims, delete owned lists, revert recipient shares to pending invitations, discard owner invitations, revoke sessions, audit (FR-014)
 │   ├── tests/                     # EXTEND: new suites (rate-limit, session, consent, pending-invitation, removal, audit); existing 80 MUST pass
 │   └── package.json               # EXTEND: + cookie dep; apply `npm audit fix` for deepmerge-ts / qs
 ├── frontend/

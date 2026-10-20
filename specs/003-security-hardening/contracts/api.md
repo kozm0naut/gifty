@@ -125,9 +125,12 @@ Removes the caller's own account (FR-014, clarification Q1).
 - **Request**: no body. Requires a valid session.
 - **204 No Content** — transactional removal (research D12): sessions
   revoked → claims on others' items cleared (items revert to `available`) →
-  owned lists (and their items/shares/invitations) deleted → pending
+  owned lists (and their items/shares/invitations) deleted → recipient-side
+  `SharePermission` rows reverted to `PendingInvitation` on each list
+  (conceals the deletion; enables rejoin on re-registration) → pending
   invitations for this email discarded → user row deleted. Both cookies
-  cleared. Audit event `account_removal` recorded.
+  cleared. Audit event `account_removal` recorded (detail includes
+  `revertedShares` count when > 0).
 - **401 Unauthorized** — not authenticated.
 - **409 Conflict** — not expected in this feature; reserved.
 
