@@ -49,6 +49,17 @@
   box-sizing: border-box;
 }
 
+html {
+  /* The browser paints the page canvas from the <html> background. On mobile,
+     the address bar / OS nav can make the viewport taller than the content
+     (and overscroll stretches it), briefly exposing that canvas — default
+     white, which flashes jarringly against the dark theme. Match the app
+     background so any exposed strip blends in; color-scheme also darkens
+     native scrollbars/overscroll indicators. */
+  background: var(--color-bg);
+  color-scheme: dark;
+}
+
 html,
 body {
   margin: 0;
