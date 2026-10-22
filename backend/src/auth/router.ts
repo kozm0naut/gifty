@@ -73,10 +73,13 @@ function isUniqueViolation(err: unknown): boolean {
 
 /** Issue the HttpOnly cookie pair for a live session (T017). */
 export function setSessionCookies(res: Response, accessToken: string, refreshToken: string): void {
-  const { cookies } = loadConfig();
+  const { cookies, session } = loadConfig();
   res.set('Set-Cookie', [
     serializeCookie(cookies.accessName, accessToken, '/'),
-    serializeCookie(cookies.refreshName, refreshToken, '/auth/refresh'),
+    // The refresh cookie must persist across browser restarts (it carries the
+    // 30-day session lifetime), while the access cookie stays a session cookie
+    // (short-lived, re-issued on every rotation).
+    serializeCookie(cookies.refreshName, refreshToken, '/auth/refresh', session.maxAgeDays * 86_400),
   ]);
 }
 
@@ -400,9 +403,12 @@ export function createAuthRouter() {
         { expiresIn: loadConfig().session.accessTtlSeconds },
       );
 
+      const cfg = loadConfig();
       res.set('Set-Cookie', [
-        serializeCookie(loadConfig().cookies.accessName, accessToken, '/'),
-        serializeCookie(loadConfig().cookies.refreshName, newRefreshToken, '/auth/refresh'),
+        serializeCookie(cfg.cookies.accessName, accessToken, '/'),
+        // Re-issued on every rotation with the full remaining lifetime so the
+        // cookie keeps matching the server-side session expiry.
+        serializeCookie(cfg.cookies.refreshName, newRefreshToken, '/auth/refresh', cfg.session.maxAgeDays * 86_400),
       ]);
       res.status(200).json({ user });
     } catch (error) {
